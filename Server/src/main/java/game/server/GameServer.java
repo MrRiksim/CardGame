@@ -36,7 +36,10 @@ public class GameServer extends WebSocketServer {
         PlayerConnection player =
                 new PlayerConnection(connection);
 
-        players.put(connection, player);
+        players.put(
+                connection,
+                player
+        );
 
         matchmakingService.addPlayer(player);
     }
@@ -58,7 +61,9 @@ public class GameServer extends WebSocketServer {
 
         if (player != null) {
 
-            matchmakingService.playerDisconnected(player);
+            matchmakingService.removePlayerFromMatch(
+                    player
+            );
         }
     }
 
@@ -67,12 +72,22 @@ public class GameServer extends WebSocketServer {
             WebSocket connection,
             String message) {
 
+        PlayerConnection player =
+                players.get(connection);
+
+        if (player == null) {
+            return;
+        }
+
         System.out.println(
-                "Received message: "
+                "Received from player: "
                         + message
         );
 
-        // Game messages will eventually be handled here.
+        matchmakingService.handleMessage(
+                player,
+                message
+        );
     }
 
     @Override

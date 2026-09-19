@@ -4,6 +4,8 @@ import org.java_websocket.client.WebSocketClient;
 import org.java_websocket.handshake.ServerHandshake;
 
 import java.net.URI;
+import java.util.ArrayList;
+import java.util.List;
 
 public class GameClient extends WebSocketClient {
 
@@ -11,12 +13,6 @@ public class GameClient extends WebSocketClient {
 
     private int myPlayerNumber = -1;
 
-    /*
-     * Used to distinguish:
-     *
-     * 1. Never connected -> connection failure
-     * 2. Connected, then lost connection -> disconnected
-     */
     private boolean hasConnected = false;
 
     public GameClient(
@@ -49,9 +45,6 @@ public class GameClient extends WebSocketClient {
                 "Server: " + message
         );
 
-        /*
-         * Waiting for an opponent.
-         */
         if (message.equals("WAITING")) {
 
             window.setWaiting();
@@ -59,13 +52,6 @@ public class GameClient extends WebSocketClient {
             return;
         }
 
-        /*
-         * MATCH:1:PLAYER1
-         *
-         * or
-         *
-         * MATCH:1:PLAYER2
-         */
         if (message.startsWith("MATCH:")) {
 
             handleMatchMessage(message);
@@ -73,19 +59,13 @@ public class GameClient extends WebSocketClient {
             return;
         }
 
-        /*
-         * STATE:matchId:p1X:p1Y:p2X:p2Y:turnPlayer
-         */
-        if (message.startsWith("STATE:")) {
+        if (message.startsWith("STATE|")) {
 
             handleStateMessage(message);
 
             return;
         }
 
-        /*
-         * Opponent disconnected.
-         */
         if (message.equals("YOU_WIN")) {
 
             window.showWin();
@@ -141,89 +121,201 @@ public class GameClient extends WebSocketClient {
 
         try {
 
+            /*
+             * STATE
+             *   1 = match ID
+             *   2 = turn player
+             *   3 = own hand
+             *   4 = opponent hand count
+             *   5 = own played
+             *   6 = opponent played
+             */
             String[] parts =
-                    message.split(":");
+                    message.split(
+                            "\\|",
+                            -1
+                    );
 
             if (parts.length != 7) {
                 return;
             }
 
-            int player1X =
-                    Integer.parseInt(parts[2]);
-
-            int player1Y =
-                    Integer.parseInt(parts[3]);
-
-            int player2X =
-                    Integer.parseInt(parts[4]);
-
-            int player2Y =
-                    Integer.parseInt(parts[5]);
+            int matchId =
+                    Integer.parseInt(parts[1]);
 
             int turnPlayer =
-                    Integer.parseInt(parts[6]);
+                    Integer.parseInt(parts[2]);
 
-            int myX;
-            int myY;
+            List<ClientCard> ownHand =
+                    parseHand(parts[3]);
 
-            int enemyX;
-            int enemyY;
+            int opponentHandCount =
+                    Integer.parseInt(parts[4]);
 
-            /*
-             * Convert server Player 1/Player 2
-             * coordinates into "me" and "enemy".
-             */
-            if (myPlayerNumber == 1) {
+            List<ClientCard> ownPlayed =
+                    parsePlayedCards(parts[5]);
 
-                myX = player1X;
-                myY = player1Y;
-
-                enemyX = player2X;
-                enemyY = player2Y;
-
-            } else if (myPlayerNumber == 2) {
-
-                myX = player2X;
-                myY = player2Y;
-
-                enemyX = player1X;
-                enemyY = player1Y;
-
-            } else {
-
-                return;
-            }
+            List<ClientCard> opponentPlayed =
+                    parsePlayedCards(parts[6]);
 
             boolean yourTurn =
                     turnPlayer == myPlayerNumber;
 
             window.updateGame(
-                    myX,
-                    myY,
-                    enemyX,
-                    enemyY,
+                    matchId,
+                    ownHand,
+                    opponentHandCount,
+                    ownPlayed,
+                    opponentPlayed,
                     yourTurn
             );
 
-        } catch (NumberFormatException e) {
+        } catch (Exception e) {
 
             System.err.println(
                     "Invalid STATE message: "
                             + message
             );
+
+            e.printStackTrace();
         }
     }
 
-    public void sendMove(
-            int x,
-            int y) {
+    private List<ClientCard> parseHand(
+            String data) {
+
+        List<ClientCard> cards =
+                new ArrayList<>();
+
+        if (data.equals("-") ||
+                data.isEmpty()) {
+
+            return cards;
+        }
+
+        String[] cardEntries =
+                data.split(";");
+
+        for (String entry :
+                cardEntries) {
+
+            String[] parts =
+                    entry.split(",");
+
+            if (parts.length != 2) {
+                continue;
+            }
+
+            CardType type =
+                    parseCardType(parts[1]);
+
+            if (type == null) {
+                continue;
+            }
+
+            cards.add(
+                    ClientCard.handCard(
+                            parts[0],
+                            type
+                    )
+            );
+        }
+
+        return cards;
+    }
+
+    private List<ClientCard> parsePlayedCards(
+            String data) {
+
+        List<ClientCard> cards =
+                new ArrayList<>();
+
+        if (data.equals("-") ||
+                data.isEmpty()) {
+
+            return cards;
+        }
+
+        String[] cardEntries =
+                data.split(";");
+
+        for (String entry :
+                cardEntries) {
+
+            String[] parts =
+                    entry.split(",");
+
+            if (parts.length != 3) {
+                continue;
+            }
+
+            CardType type =
+                    parseCardType(parts[1]);
+
+            if (type == null) {
+                continue;
+            }
+
+            int zone =
+                    Integer.parseInt(parts[2]);
+
+            cards.add(
+                    ClientCard.playedCard(
+                            parts[0],
+                            type,
+                            zone
+                    )
+            );
+        }
+
+        return cards;
+    }
+
+    private CardType parseCardType(
+            String value) {
+
+        if (value.equals("BROWN")) {
+            return CardType.LIGHT_BROWN;
+        }
+
+        if (value.equals("BLUE")) {
+            return CardType.LIGHT_BLUE;
+        }
+
+        /*
+         * Server enum names.
+         */
+        if (value.equals("LIGHT_BROWN")) {
+            return CardType.LIGHT_BROWN;
+        }
+
+        if (value.equals("LIGHT_BLUE")) {
+            return CardType.LIGHT_BLUE;
+        }
+
+        return null;
+    }
+
+    public void moveCard(
+            BoardPanel.CardMove move) {
 
         if (!isOpen()) {
             return;
         }
 
+        String type =
+                move.targetType() ==
+                        BoardPanel.DropZoneType.BROWN
+                        ? "BROWN"
+                        : "BLUE";
+
         send(
-                "MOVE:" + x + ":" + y
+                "MOVE_CARD|"
+                        + move.cardId()
+                        + "|"
+                        + type
+                        + "|"
+                        + move.targetZone()
         );
     }
 
@@ -246,10 +338,6 @@ public class GameClient extends WebSocketClient {
                 "Disconnected from server."
         );
 
-        /*
-         * If we never connected successfully, onError()
-         * already handles the UI. Don't overwrite it.
-         */
         if (hasConnected) {
 
             window.showDisconnected();
@@ -260,20 +348,27 @@ public class GameClient extends WebSocketClient {
     public void onError(
             Exception exception) {
 
-        System.err.println(
-                "Connection error:"
-        );
-
         /*
-         * You can still print the error for debugging,
-         * but the user gets a clean UI message.
+         * A failed initial connection is an expected
+         * situation when the server isn't running.
+         *
+         * Do not print a stack trace for it.
          */
-        exception.printStackTrace();
-
         if (!hasConnected) {
 
             window.showCannotConnect();
+
+            return;
         }
+
+        /*
+         * Once we have successfully connected, errors
+         * are unexpected and useful to see while developing.
+         */
+        System.err.println(
+                "WebSocket error: "
+                        + exception.getMessage()
+        );
     }
 
     public static void main(

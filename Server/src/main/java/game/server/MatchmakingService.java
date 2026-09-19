@@ -21,27 +21,15 @@ public class MatchmakingService {
     public synchronized void addPlayer(
             PlayerConnection player) {
 
-        /*
-         * Remove disconnected players which may still
-         * be sitting in the waiting queue.
-         */
         while (!waitingPlayers.isEmpty()) {
 
             PlayerConnection opponent =
                     waitingPlayers.poll();
 
             if (!opponent.isConnected()) {
-
-                System.out.println(
-                        "Removed disconnected player from queue."
-                );
-
                 continue;
             }
 
-            /*
-             * Create the match.
-             */
             int matchId = nextMatchId++;
 
             Match match =
@@ -66,26 +54,23 @@ public class MatchmakingService {
                     match
             );
 
-            /*
-             * Tell each player which player number they are.
-             */
             opponent.send(
-                    "MATCH:" + matchId + ":PLAYER1"
+                    "MATCH:"
+                            + matchId
+                            + ":PLAYER1"
             );
 
             player.send(
-                    "MATCH:" + matchId + ":PLAYER2"
+                    "MATCH:"
+                            + matchId
+                            + ":PLAYER2"
             );
 
-            /*
-             * Send initial game state.
-             */
             broadcastState(match);
 
             System.out.println(
                     "Created Match "
                             + matchId
-                            + ". Player 1 goes against Player 2."
             );
 
             System.out.println(
@@ -96,9 +81,6 @@ public class MatchmakingService {
             return;
         }
 
-        /*
-         * Nobody is waiting.
-         */
         waitingPlayers.add(player);
 
         player.send("WAITING");
@@ -112,18 +94,18 @@ public class MatchmakingService {
             PlayerConnection player,
             String message) {
 
-        Match match = playerMatches.get(player);
+        Match match =
+                playerMatches.get(player);
 
-        if (match == null || !match.isActive()) {
+        if (match == null ||
+                !match.isActive()) {
+
             return;
         }
 
-        /*
-         * MOVE:x:y
-         */
-        if (message.startsWith("MOVE:")) {
+        if (message.startsWith("MOVE_CARD|")) {
 
-            handleMove(
+            handleCardMove(
                     player,
                     match,
                     message
@@ -132,14 +114,15 @@ public class MatchmakingService {
             return;
         }
 
-        /*
-         * END_TURN
-         */
         if (message.equals("END_TURN")) {
 
             boolean changed =
                     match.endTurn(player);
 
+            /*
+             * Whether the turn changed or not,
+             * send authoritative state back.
+             */
             if (changed) {
 
                 System.out.println(
@@ -149,82 +132,117 @@ public class MatchmakingService {
                                 + match.getPlayerNumber(player)
                                 + " ended their turn."
                 );
-
-                broadcastState(match);
             }
+
+            broadcastState(match);
 
             return;
         }
 
         System.out.println(
-                "Unknown message: " + message
+                "Unknown message: "
+                        + message
         );
     }
 
-    private void handleMove(
+    private void handleCardMove(
             PlayerConnection player,
             Match match,
             String message) {
 
         try {
 
+            /*
+             * MOVE_CARD|cardId|BROWN|2
+             */
             String[] parts =
-                    message.split(":");
+                    message.split("\\|");
 
-            if (parts.length != 3) {
+            if (parts.length != 4) {
                 return;
             }
 
-            int x = Integer.parseInt(parts[1]);
-            int y = Integer.parseInt(parts[2]);
+            String cardId =
+                    parts[1];
+
+            CardType targetType;
+
+            if (parts[2].equals("BROWN")) {
+
+                targetType =
+                        CardType.LIGHT_BROWN;
+
+            } else if (parts[2].equals("BLUE")) {
+
+                targetType =
+                        CardType.LIGHT_BLUE;
+
+            } else {
+
+                return;
+            }
+
+            int targetZone =
+                    Integer.parseInt(parts[3]);
 
             boolean moved =
-                    match.movePlayer(
+                    match.moveCard(
                             player,
-                            x,
-                            y
+                            cardId,
+                            targetType,
+                            targetZone
                     );
 
             if (moved) {
-                broadcastState(match);
+
+                System.out.println(
+                        "Card move accepted."
+                );
+            } else {
+
+                System.out.println(
+                        "Card move rejected."
+                );
             }
+
+            /*
+             * Always send the authoritative state.
+             *
+             * If the client made an invalid move,
+             * this effectively makes it snap back.
+             */
+            broadcastState(match);
 
         } catch (NumberFormatException e) {
 
             System.out.println(
-                    "Invalid MOVE message: "
+                    "Invalid card movement: "
                             + message
             );
+
+            broadcastState(match);
         }
     }
 
     private void broadcastState(
             Match match) {
 
-        String message =
-                "STATE:"
-                        + match.getId()
-                        + ":"
-                        + match.getPlayer1X()
-                        + ":"
-                        + match.getPlayer1Y()
-                        + ":"
-                        + match.getPlayer2X()
-                        + ":"
-                        + match.getPlayer2Y()
-                        + ":"
-                        + match.getCurrentTurnPlayerNumber();
+        match.getPlayer1().send(
+                match.buildStateFor(
+                        match.getPlayer1()
+                )
+        );
 
-        match.getPlayer1().send(message);
-        match.getPlayer2().send(message);
+        match.getPlayer2().send(
+                match.buildStateFor(
+                        match.getPlayer2()
+                )
+        );
     }
 
     public synchronized void removePlayerFromMatch(
             PlayerConnection player) {
 
-        /*
-         * Was the player simply waiting?
-         */
         if (waitingPlayers.remove(player)) {
 
             System.out.println(
@@ -234,9 +252,6 @@ public class MatchmakingService {
             return;
         }
 
-        /*
-         * Was the player in an active match?
-         */
         Match match =
                 playerMatches.remove(player);
 
@@ -262,19 +277,15 @@ public class MatchmakingService {
                         + match.getId()
         );
 
-        /*
-         * Tell the remaining player that they won.
-         */
-        if (opponent != null && opponent.isConnected()) {
+        if (opponent != null &&
+                opponent.isConnected()) {
 
             opponent.send("YOU_WIN");
 
             System.out.println(
                     "Player "
                             + match.getPlayerNumber(opponent)
-                            + " wins Match "
-                            + match.getId()
-                            + " because their opponent disconnected."
+                            + " wins."
             );
         }
     }

@@ -2,6 +2,7 @@ package game.client;
 
 import javax.swing.*;
 import java.awt.*;
+import java.util.List;
 
 public class GameWindow {
 
@@ -17,6 +18,8 @@ public class GameWindow {
 
     private GameClient client;
 
+    private boolean gameOver = false;
+
     public GameWindow() {
 
         frame = new JFrame("Card Game");
@@ -26,17 +29,16 @@ public class GameWindow {
         );
 
         frame.setSize(
-                700,
-                520
+                820,
+                1000
         );
 
         frame.setLocationRelativeTo(null);
 
-        /*
-         * Top information area.
-         */
         JPanel topPanel =
-                new JPanel(new GridLayout(3, 1));
+                new JPanel(
+                        new GridLayout(3, 1)
+                );
 
         matchLabel =
                 new JLabel(
@@ -56,35 +58,28 @@ public class GameWindow {
                         SwingConstants.CENTER
                 );
 
-        Font labelFont =
+        Font font =
                 new Font(
                         "Arial",
                         Font.BOLD,
                         18
                 );
 
-        matchLabel.setFont(labelFont);
-        turnLabel.setFont(labelFont);
-        statusLabel.setFont(labelFont);
+        matchLabel.setFont(font);
+        turnLabel.setFont(font);
+        statusLabel.setFont(font);
 
         topPanel.add(matchLabel);
         topPanel.add(turnLabel);
         topPanel.add(statusLabel);
 
-        /*
-         * Board.
-         */
         boardPanel =
-                new BoardPanel(this::sendMove);
+                new BoardPanel(
+                        this::sendMove
+                );
 
-        /*
-         * The board MUST NOT be visible until a match exists.
-         */
         boardPanel.setVisible(false);
 
-        /*
-         * End turn button.
-         */
         endTurnButton =
                 new JButton("End Turn");
 
@@ -92,7 +87,9 @@ public class GameWindow {
 
         endTurnButton.addActionListener(e -> {
 
-            if (client != null) {
+            if (client != null &&
+                    !gameOver) {
+
                 client.endTurn();
             }
         });
@@ -100,7 +97,9 @@ public class GameWindow {
         JPanel bottomPanel =
                 new JPanel();
 
-        bottomPanel.add(endTurnButton);
+        bottomPanel.add(
+                endTurnButton
+        );
 
         frame.setLayout(
                 new BorderLayout()
@@ -121,35 +120,20 @@ public class GameWindow {
                 BorderLayout.SOUTH
         );
 
-        /*
-         * Start in the waiting/connection state.
-         */
-        setInitialState();
-
         frame.setVisible(true);
     }
 
-    public void setClient(GameClient client) {
+    public void setClient(
+            GameClient client) {
+
         this.client = client;
-    }
-
-    private void setInitialState() {
-
-        matchLabel.setText("");
-        turnLabel.setText("");
-
-        statusLabel.setText(
-                "Connecting to server..."
-        );
-
-        endTurnButton.setEnabled(false);
-
-        boardPanel.setVisible(false);
     }
 
     public void setWaiting() {
 
         SwingUtilities.invokeLater(() -> {
+
+            gameOver = false;
 
             matchLabel.setText("");
 
@@ -161,9 +145,8 @@ public class GameWindow {
 
             endTurnButton.setEnabled(false);
 
-            /*
-             * No match = no board.
-             */
+            boardPanel.resetGame();
+
             boardPanel.setVisible(false);
 
             frame.revalidate();
@@ -171,9 +154,12 @@ public class GameWindow {
         });
     }
 
-    public void showMatch(int matchId) {
+    public void showMatch(
+            int matchId) {
 
         SwingUtilities.invokeLater(() -> {
+
+            gameOver = false;
 
             matchLabel.setText(
                     "Match " + matchId
@@ -183,12 +169,13 @@ public class GameWindow {
                     "Match started"
             );
 
-            /*
-             * A match now exists, so show the board.
-             */
-            boardPanel.setVisible(true);
+            turnLabel.setText(
+                    "Waiting for game state..."
+            );
 
             boardPanel.resetGame();
+
+            boardPanel.setVisible(true);
 
             frame.revalidate();
             frame.repaint();
@@ -196,25 +183,28 @@ public class GameWindow {
     }
 
     public void updateGame(
-            int myX,
-            int myY,
-            int enemyX,
-            int enemyY,
+            int matchId,
+            List<ClientCard> ownHand,
+            int opponentHandCount,
+            List<ClientCard> ownPlayed,
+            List<ClientCard> opponentPlayed,
             boolean yourTurn) {
 
         SwingUtilities.invokeLater(() -> {
 
-            /*
-             * The server has confirmed that we are
-             * actually in a match.
-             */
+            gameOver = false;
+
+            matchLabel.setText(
+                    "Match " + matchId
+            );
+
             boardPanel.setVisible(true);
 
             boardPanel.updateState(
-                    myX,
-                    myY,
-                    enemyX,
-                    enemyY,
+                    ownHand,
+                    opponentHandCount,
+                    ownPlayed,
+                    opponentPlayed,
                     yourTurn
             );
 
@@ -225,7 +215,7 @@ public class GameWindow {
                 );
 
                 statusLabel.setText(
-                        "Move your green card or end your turn"
+                        "Play or move your cards"
                 );
 
                 endTurnButton.setEnabled(true);
@@ -252,15 +242,16 @@ public class GameWindow {
 
         SwingUtilities.invokeLater(() -> {
 
+            gameOver = true;
+
             /*
-             * IMPORTANT:
-             * Do NOT hide the board.
+             * Keep displaying the field.
              */
             boardPanel.setGameOver();
             boardPanel.setVisible(true);
 
             turnLabel.setText(
-                    "YOU WIN!"
+                    "YOU WIN"
             );
 
             statusLabel.setText(
@@ -278,6 +269,8 @@ public class GameWindow {
 
         SwingUtilities.invokeLater(() -> {
 
+            gameOver = true;
+
             matchLabel.setText("");
 
             turnLabel.setText("");
@@ -288,9 +281,6 @@ public class GameWindow {
 
             endTurnButton.setEnabled(false);
 
-            /*
-             * There is no match, therefore no board.
-             */
             boardPanel.setVisible(false);
 
             frame.revalidate();
@@ -302,6 +292,8 @@ public class GameWindow {
 
         SwingUtilities.invokeLater(() -> {
 
+            gameOver = true;
+
             matchLabel.setText("");
 
             turnLabel.setText("");
@@ -312,10 +304,6 @@ public class GameWindow {
 
             endTurnButton.setEnabled(false);
 
-            /*
-             * The server connection itself was lost,
-             * so there is no playable board anymore.
-             */
             boardPanel.setVisible(false);
 
             frame.revalidate();
@@ -323,14 +311,15 @@ public class GameWindow {
         });
     }
 
-    private void sendMove(Point point) {
+    private void sendMove(
+            BoardPanel.CardMove move) {
 
-        if (client != null) {
+        if (client == null ||
+                gameOver) {
 
-            client.sendMove(
-                    point.x,
-                    point.y
-            );
+            return;
         }
+
+        client.moveCard(move);
     }
 }

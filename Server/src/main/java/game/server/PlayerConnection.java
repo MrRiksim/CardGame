@@ -20,11 +20,9 @@ public class PlayerConnection {
     }
 
     public void send(String message) {
-
         if (!socket.isOpen()) {
             return;
         }
-
         try {
             socket.send(message);
         } catch (WebsocketNotConnectedException e) {

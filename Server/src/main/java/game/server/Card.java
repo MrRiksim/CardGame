@@ -4,13 +4,9 @@ public class Card {
 
     private final String id;
     private final CardType type;
-
     private int zoneIndex = -1;
 
-    public Card(
-            String id,
-            CardType type) {
-
+    public Card(String id, CardType type) {
         this.id = id;
         this.type = type;
     }

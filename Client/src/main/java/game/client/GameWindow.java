@@ -9,6 +9,7 @@ public class GameWindow {
     private final JFrame frame;
     private final JLabel matchLabel;
     private final JLabel turnLabel;
+    private final JLabel statsLabel;
     private final JLabel statusLabel;
     private final JButton endTurnButton;
     private final BoardPanel boardPanel;
@@ -19,24 +20,27 @@ public class GameWindow {
     public GameWindow() {
         frame = new JFrame("Card Game");
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        frame.setSize(820, 1000);
+        frame.setSize(820, 1040);
         frame.setLocationRelativeTo(null);
 
-        JPanel topPanel = new JPanel(new GridLayout(3, 1));
+        JPanel topPanel = new JPanel(new GridLayout(4, 1));
         matchLabel = new JLabel("", SwingConstants.CENTER);
         turnLabel = new JLabel("", SwingConstants.CENTER);
+        statsLabel = new JLabel("", SwingConstants.CENTER);
         statusLabel = new JLabel("Connecting to server...", SwingConstants.CENTER);
 
-        Font font = new Font("Arial", Font.BOLD, 18);
+        Font font = new Font("Arial", Font.BOLD, 16);
         matchLabel.setFont(font);
         turnLabel.setFont(font);
+        statsLabel.setFont(font);
         statusLabel.setFont(font);
 
         topPanel.add(matchLabel);
         topPanel.add(turnLabel);
+        topPanel.add(statsLabel);
         topPanel.add(statusLabel);
 
-        boardPanel = new BoardPanel(this::sendMove);
+        boardPanel = new BoardPanel(this::sendPlayAction);
         boardPanel.setVisible(false);
 
         endTurnButton = new JButton("End Turn");
@@ -66,6 +70,7 @@ public class GameWindow {
             gameOver = false;
             matchLabel.setText("");
             turnLabel.setText("");
+            statsLabel.setText("");
             statusLabel.setText("Waiting for opponent");
             endTurnButton.setEnabled(false);
             boardPanel.resetGame();
@@ -90,21 +95,32 @@ public class GameWindow {
 
     public void updateGame(
             int matchId,
+            int ownHealth,
+            int opponentHealth,
+            int ownEnergy,
             List<ClientCard> ownHand,
             int opponentHandCount,
-            List<ClientCard> ownPlayed,
-            List<ClientCard> opponentPlayed,
+            List<ClientUnit> ownFront,
+            List<ClientUnit> opponentFront,
+            List<ClientTrap> ownBack,
+            List<Integer> opponentBackZones,
             boolean yourTurn) {
 
         SwingUtilities.invokeLater(() -> {
             gameOver = false;
             matchLabel.setText("Match " + matchId);
+            statsLabel.setText(
+                    "You: " + ownHealth + " HP, " + ownEnergy + " energy    |    Opponent: "
+                            + opponentHealth + " HP");
+
             boardPanel.setVisible(true);
-            boardPanel.updateState(ownHand, opponentHandCount, ownPlayed, opponentPlayed, yourTurn);
+            boardPanel.updateState(
+                    ownHand, opponentHandCount, ownFront, opponentFront,
+                    ownBack, opponentBackZones, yourTurn);
 
             if (yourTurn) {
                 turnLabel.setText("YOUR TURN");
-                statusLabel.setText("Play or move your cards");
+                statusLabel.setText("Play cards, then end your turn");
                 endTurnButton.setEnabled(true);
             } else {
                 turnLabel.setText("OPPONENT'S TURN");
@@ -120,13 +136,23 @@ public class GameWindow {
     public void showWin() {
         SwingUtilities.invokeLater(() -> {
             gameOver = true;
-            /*
-             * Keep displaying the field.
-             */
             boardPanel.setGameOver();
             boardPanel.setVisible(true);
             turnLabel.setText("YOU WIN");
-            statusLabel.setText("Your opponent disconnected.");
+            statusLabel.setText("Your opponent has been defeated.");
+            endTurnButton.setEnabled(false);
+            frame.revalidate();
+            frame.repaint();
+        });
+    }
+
+    public void showLose() {
+        SwingUtilities.invokeLater(() -> {
+            gameOver = true;
+            boardPanel.setGameOver();
+            boardPanel.setVisible(true);
+            turnLabel.setText("YOU LOSE");
+            statusLabel.setText("Your health reached zero.");
             endTurnButton.setEnabled(false);
             frame.revalidate();
             frame.repaint();
@@ -138,6 +164,7 @@ public class GameWindow {
             gameOver = true;
             matchLabel.setText("");
             turnLabel.setText("");
+            statsLabel.setText("");
             statusLabel.setText("Can't connect to server");
             endTurnButton.setEnabled(false);
             boardPanel.setVisible(false);
@@ -151,6 +178,7 @@ public class GameWindow {
             gameOver = true;
             matchLabel.setText("");
             turnLabel.setText("");
+            statsLabel.setText("");
             statusLabel.setText("Disconnected from server");
             endTurnButton.setEnabled(false);
             boardPanel.setVisible(false);
@@ -159,10 +187,17 @@ public class GameWindow {
         });
     }
 
-    private void sendMove(BoardPanel.CardMove move) {
+    private void sendPlayAction(PlayAction action) {
         if (client == null || gameOver) {
             return;
         }
-        client.moveCard(move);
+
+        if (action instanceof PlayAction.UnitPlacement placement) {
+            client.playUnit(placement.cardId(), placement.zoneIndex());
+        } else if (action instanceof PlayAction.TrapPlacement placement) {
+            client.playTrap(placement.cardId(), placement.zoneIndex());
+        } else if (action instanceof PlayAction.SpellCast cast) {
+            client.playSpell(cast.cardId(), cast.targetUnitId());
+        }
     }
 }

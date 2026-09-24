@@ -10,90 +10,74 @@ import java.util.function.Consumer;
 
 public class BoardPanel extends JPanel {
 
-    /*
-     * Overall board.
-     */
     private static final int BOARD_WIDTH = 760;
     private static final int BOARD_HEIGHT = 900;
 
     /*
-     * Portrait-oriented zones.
+     * The five playable columns, shared by both players' front (unit) and
+     * back (trap) rows.
      */
     private static final int ZONE_WIDTH = 82;
     private static final int ZONE_HEIGHT = 112;
     private static final int ZONE_GAP = 10;
-
-    /*
-     * Portrait-oriented cards.
-     */
-    private static final int CARD_WIDTH = 64;
-    private static final int CARD_HEIGHT = 96;
-
-    /*
-     * Five playable columns.
-     */
     private static final int FIELD_LEFT = 140;
 
     /*
-     * Opponent:
-     *
-     * Brown row + graveyard
-     * Blue row + deck
+     * Opponent: back row (hidden traps, farthest from the divider) then
+     * front row (units, closest to the divider). Player is the mirror
+     * image, closest to their own hand at the bottom.
      */
-    private static final int OPPONENT_BLUE_Y = 150;
-    private static final int OPPONENT_BROWN_Y = 275;
+    private static final int OPPONENT_BACK_Y = 150;
+    private static final int OPPONENT_FRONT_Y = 275;
+    private static final int PLAYER_FRONT_Y = 490;
+    private static final int PLAYER_BACK_Y = 615;
 
-    /*
-     * Player:
-     *
-     * Blue row + deck
-     * Brown row + graveyard
-     */
-    private static final int PLAYER_BROWN_Y = 490;
-    private static final int PLAYER_BLUE_Y = 615;
-
-    /*
-     * Hidden opponent hand.
-     */
     private static final int OPPONENT_HAND_Y = 25;
+    private static final int PLAYER_HAND_Y = 780;
 
     /*
-     * Own hand.
+     * Cards drawn small enough to fit inside a field zone.
      */
-    private static final int PLAYER_HAND_Y = 790;
+    private static final int FIELD_CARD_WIDTH = 70;
+    private static final int FIELD_CARD_HEIGHT = 100;
 
     /*
-     * Colors.
+     * Cards drawn large enough to read their description.
      */
-    private static final Color LIGHT_BROWN = new Color(215, 190, 145);
-    private static final Color LIGHT_BLUE = new Color(175, 210, 235);
-    private static final Color DARK_BROWN = new Color(95, 55, 30);
+    private static final int HAND_CARD_WIDTH = 96;
+    private static final int HAND_CARD_HEIGHT = 140;
+    private static final int HAND_GAP = 8;
+
+    private static final int OPPONENT_HAND_CARD_WIDTH = 60;
+    private static final int OPPONENT_HAND_CARD_HEIGHT = 86;
+    private static final int OPPONENT_HAND_GAP = 6;
+
+    private static final Color FRONT_ZONE_COLOR = new Color(210, 235, 210);
+    private static final Color BACK_ZONE_COLOR = new Color(224, 214, 234);
+    private static final Color CARD_BACK_COLOR = new Color(95, 55, 30);
     private static final Color GRAVEYARD_GRAY = new Color(155, 155, 155);
 
-    private final List<ClientCard> ownHand = new ArrayList<>();
-    private final List<ClientCard> ownPlayed = new ArrayList<>();
-    private final List<ClientCard> opponentPlayed = new ArrayList<>();
+    private List<ClientCard> ownHand = new ArrayList<>();
+    private List<ClientUnit> ownFront = new ArrayList<>();
+    private List<ClientUnit> opponentFront = new ArrayList<>();
+    private List<ClientTrap> ownBack = new ArrayList<>();
+    private List<Integer> opponentBackZones = new ArrayList<>();
 
     private int opponentHandCount = 0;
     private boolean yourTurn = false;
     private boolean gameOver = false;
 
     /*
-     * Card currently being dragged.
-     *
-     * IMPORTANT:
-     * This is only ever a card from the hand.
+     * Only ever a card currently in hand - played cards can't be re-dragged.
      */
-    private String draggedCardId;
     private ClientCard draggedCard;
-
     private int mouseX;
     private int mouseY;
 
-    private final Consumer<CardMove> moveListener;
+    private final Consumer<PlayAction> playListener;
 
-    public BoardPanel(Consumer<CardMove> moveListener) {
-        this.moveListener = moveListener;
+    public BoardPanel(Consumer<PlayAction> playListener) {
+        this.playListener = playListener;
 
         setPreferredSize(new Dimension(BOARD_WIDTH, BOARD_HEIGHT));
         setBackground(new Color(235, 235, 235));
@@ -129,36 +113,37 @@ public class BoardPanel extends JPanel {
     public void updateState(
             List<ClientCard> ownHand,
             int opponentHandCount,
-            List<ClientCard> ownPlayed,
-            List<ClientCard> opponentPlayed,
+            List<ClientUnit> ownFront,
+            List<ClientUnit> opponentFront,
+            List<ClientTrap> ownBack,
+            List<Integer> opponentBackZones,
             boolean yourTurn) {
 
-        this.ownHand.clear();
-        this.ownHand.addAll(ownHand);
+        this.ownHand = new ArrayList<>(ownHand);
         this.opponentHandCount = opponentHandCount;
-        this.ownPlayed.clear();
-        this.ownPlayed.addAll(ownPlayed);
-        this.opponentPlayed.clear();
-        this.opponentPlayed.addAll(opponentPlayed);
+        this.ownFront = new ArrayList<>(ownFront);
+        this.opponentFront = new ArrayList<>(opponentFront);
+        this.ownBack = new ArrayList<>(ownBack);
+        this.opponentBackZones = new ArrayList<>(opponentBackZones);
         this.yourTurn = yourTurn;
 
         /*
-         * The server state is authoritative.
+         * The server state is authoritative - any in-flight drag is stale.
          */
         draggedCard = null;
-        draggedCardId = null;
         repaint();
     }
 
     public void resetGame() {
-        ownHand.clear();
-        ownPlayed.clear();
-        opponentPlayed.clear();
+        ownHand = new ArrayList<>();
+        ownFront = new ArrayList<>();
+        opponentFront = new ArrayList<>();
+        ownBack = new ArrayList<>();
+        opponentBackZones = new ArrayList<>();
         opponentHandCount = 0;
         yourTurn = false;
         gameOver = false;
         draggedCard = null;
-        draggedCardId = null;
         repaint();
     }
 
@@ -166,54 +151,26 @@ public class BoardPanel extends JPanel {
         gameOver = true;
         yourTurn = false;
         draggedCard = null;
-        draggedCardId = null;
         repaint();
     }
 
     /*
-     * Immediately move a card visually when the player
-     * successfully drops it on a valid zone.
-     *
-     * The server will then send the authoritative state.
+     * ==========================================================
+     * Dragging
+     * ==========================================================
      */
-    public void applyLocalMove(String cardId, CardType type, int zoneIndex) {
-        ClientCard movingCard = null;
 
-        /*
-         * Card was in our hand.
-         */
-        for (ClientCard card : ownHand) {
-            if (card.id().equals(cardId)) {
-                movingCard = card;
-                break;
-            }
-        }
-
-        if (movingCard != null) {
-            ownHand.remove(movingCard);
-            ownPlayed.add(ClientCard.playedCard(cardId, type, zoneIndex));
-            repaint();
-        }
-    }
-
-    /*
-     * ONLY HAND CARDS ARE SEARCHED HERE.
-     *
-     * This is what prevents an already-played card
-     * from being draggable.
-     */
     private void startDragging(int x, int y) {
         if (!yourTurn || gameOver) {
             return;
         }
 
         for (int i = 0; i < ownHand.size(); i++) {
-            ClientCard card = ownHand.get(i);
-            Rectangle rectangle = getHandCardRectangle(i, ownHand.size());
+            Rectangle rectangle = getHandCardRectangle(
+                    i, ownHand.size(), HAND_CARD_WIDTH, HAND_CARD_HEIGHT, HAND_GAP, PLAYER_HAND_Y);
 
             if (rectangle.contains(x, y)) {
-                draggedCard = card;
-                draggedCardId = card.id();
+                draggedCard = ownHand.get(i);
                 mouseX = x;
                 mouseY = y;
                 repaint();
@@ -227,73 +184,108 @@ public class BoardPanel extends JPanel {
             return;
         }
 
-        DropTarget target = findOwnDropTarget(x, y);
-
-        /*
-         * Invalid drop:
-         *
-         * Don't change the model.
-         * Therefore, the card snaps back.
-         */
-        if (target == null) {
-            draggedCard = null;
-            draggedCardId = null;
-            repaint();
-            return;
+        PlayAction action = resolveAction(x, y);
+        if (action != null) {
+            playListener.accept(action);
         }
-
-        /*
-         * Make sure brown cards only go to brown
-         * zones and blue cards only go to blue zones.
-         */
-        if (!isCorrectType(draggedCard, target.type())) {
-            draggedCard = null;
-            draggedCardId = null;
-            repaint();
-            return;
-        }
-
-        /*
-         * Don't allow an occupied zone.
-         */
-        if (isOwnZoneOccupied(target.type(), target.zoneIndex())) {
-            draggedCard = null;
-            draggedCardId = null;
-            repaint();
-            return;
-        }
-
-        /*
-         * Visually snap the card into the zone.
-         */
-        applyLocalMove(draggedCard.id(), draggedCard.type(), target.zoneIndex());
-
-        /*
-         * Send the logical operation to the server.
-         */
-        moveListener.accept(new CardMove(draggedCard.id(), target.type(), target.zoneIndex()));
 
         draggedCard = null;
-        draggedCardId = null;
         repaint();
     }
 
-    private boolean isCorrectType(ClientCard card, DropZoneType targetType) {
-        if (targetType == DropZoneType.BROWN) {
-            return card.type() == CardType.LIGHT_BROWN;
+    /*
+     * A drop is resolved in this order: a unit under the cursor means a
+     * spell cast; an empty own front zone means a unit placement; an empty
+     * own back zone means a trap placement; anything else only works for an
+     * untargeted (SPECIAL) spell. Each branch also has to match what kind
+     * of card is actually being dragged, or the drop is invalid.
+     */
+    private PlayAction resolveAction(int x, int y) {
+        ClientUnit targetUnit = findUnitAt(x, y);
+        if (targetUnit != null) {
+            if (draggedCard instanceof ClientSpell spell) {
+                return new PlayAction.SpellCast(spell.id(), targetUnit.id());
+            }
+            return null;
         }
-        return card.type() == CardType.LIGHT_BLUE;
+
+        Integer emptyFrontZone = findEmptyOwnFrontZone(x, y);
+        if (emptyFrontZone != null) {
+            if (draggedCard instanceof ClientUnit unit) {
+                return new PlayAction.UnitPlacement(unit.id(), emptyFrontZone);
+            }
+            return null;
+        }
+
+        Integer emptyBackZone = findEmptyOwnBackZone(x, y);
+        if (emptyBackZone != null) {
+            if (draggedCard instanceof ClientTrap trap) {
+                return new PlayAction.TrapPlacement(trap.id(), emptyBackZone);
+            }
+            return null;
+        }
+
+        if (draggedCard instanceof ClientSpell spell
+                && spell.spellType() == SpellType.SPECIAL
+                && new Rectangle(0, 0, BOARD_WIDTH, BOARD_HEIGHT).contains(x, y)) {
+            return new PlayAction.SpellCast(spell.id(), null);
+        }
+
+        return null;
     }
 
-    private boolean isOwnZoneOccupied(DropZoneType type, int zoneIndex) {
-        for (ClientCard card : ownPlayed) {
-            if (card.zoneIndex() != zoneIndex) {
+    private ClientUnit findUnitAt(int x, int y) {
+        for (ClientUnit unit : ownFront) {
+            Rectangle zone = getOwnZoneRectangle(unit.zoneIndex(), PLAYER_FRONT_Y);
+            if (getFieldCardRectangle(zone).contains(x, y)) {
+                return unit;
+            }
+        }
+        for (ClientUnit unit : opponentFront) {
+            Rectangle zone = getOpponentZoneRectangle(unit.zoneIndex(), OPPONENT_FRONT_Y);
+            if (getFieldCardRectangle(zone).contains(x, y)) {
+                return unit;
+            }
+        }
+        return null;
+    }
+
+    private Integer findEmptyOwnFrontZone(int x, int y) {
+        for (int zone = 0; zone < 5; zone++) {
+            if (isZoneOccupied(ownFront, zone)) {
                 continue;
             }
-            if (type == DropZoneType.BROWN && card.type() == CardType.LIGHT_BROWN) {
+            if (getOwnZoneRectangle(zone, PLAYER_FRONT_Y).contains(x, y)) {
+                return zone;
+            }
+        }
+        return null;
+    }
+
+    private Integer findEmptyOwnBackZone(int x, int y) {
+        for (int zone = 0; zone < 5; zone++) {
+            if (isBackZoneOccupied(zone)) {
+                continue;
+            }
+            if (getOwnZoneRectangle(zone, PLAYER_BACK_Y).contains(x, y)) {
+                return zone;
+            }
+        }
+        return null;
+    }
+
+    private boolean isZoneOccupied(List<ClientUnit> units, int zone) {
+        for (ClientUnit unit : units) {
+            if (unit.zoneIndex() == zone) {
                 return true;
             }
-            if (type == DropZoneType.BLUE && card.type() == CardType.LIGHT_BLUE) {
+        }
+        return false;
+    }
+
+    private boolean isBackZoneOccupied(int zone) {
+        for (ClientTrap trap : ownBack) {
+            if (trap.zoneIndex() == zone) {
                 return true;
             }
         }
@@ -301,34 +293,10 @@ public class BoardPanel extends JPanel {
     }
 
     /*
-     * IMPORTANT:
-     * This only checks the player's own two rows.
-     *
-     * The opponent's rows cannot be drop targets.
+     * ==========================================================
+     * Painting
+     * ==========================================================
      */
-    private DropTarget findOwnDropTarget(int x, int y) {
-        /*
-         * Player's blue row.
-         */
-        for (int zone = 0; zone < 5; zone++) {
-            Rectangle rectangle = getOwnZoneRectangle(zone, PLAYER_BLUE_Y);
-            if (rectangle.contains(x, y)) {
-                return new DropTarget(DropZoneType.BLUE, zone);
-            }
-        }
-
-        /*
-         * Player's brown row.
-         */
-        for (int zone = 0; zone < 5; zone++) {
-            Rectangle rectangle = getOwnZoneRectangle(zone, PLAYER_BROWN_Y);
-            if (rectangle.contains(x, y)) {
-                return new DropTarget(DropZoneType.BROWN, zone);
-            }
-        }
-
-        return null;
-    }
 
     @Override
     protected void paintComponent(Graphics g) {
@@ -340,201 +308,126 @@ public class BoardPanel extends JPanel {
         drawBoard(graphics);
         drawOpponentHand(graphics);
         drawOwnHand(graphics);
-        drawPlayedCards(graphics);
+        drawFrontZones(graphics);
+        drawBackZones(graphics);
 
         if (draggedCard != null) {
-            drawDraggedCard(graphics);
+            Rectangle rectangle = new Rectangle(
+                    mouseX - HAND_CARD_WIDTH / 2, mouseY - HAND_CARD_HEIGHT / 2,
+                    HAND_CARD_WIDTH, HAND_CARD_HEIGHT);
+            CardRenderer.draw(graphics, rectangle, draggedCard, true);
         }
 
         graphics.dispose();
     }
 
     private void drawBoard(Graphics2D graphics) {
-        /*
-         * ==========================
-         * OPPONENT SIDE
-         * ==========================
-         */
-
-        /*
-         * Opponent brown row.
-         */
         for (int zone = 0; zone < 5; zone++) {
-            drawZone(graphics, zone, OPPONENT_BROWN_Y, LIGHT_BROWN, true);
+            drawZone(graphics, getOpponentZoneRectangle(zone, OPPONENT_BACK_Y), BACK_ZONE_COLOR);
+            drawZone(graphics, getOpponentZoneRectangle(zone, OPPONENT_FRONT_Y), FRONT_ZONE_COLOR);
+            drawZone(graphics, getOwnZoneRectangle(zone, PLAYER_FRONT_Y), FRONT_ZONE_COLOR);
+            drawZone(graphics, getOwnZoneRectangle(zone, PLAYER_BACK_Y), BACK_ZONE_COLOR);
         }
 
-        /*
-         * Opponent blue row.
-         */
-        for (int zone = 0; zone < 5; zone++) {
-            drawZone(graphics, zone, OPPONENT_BLUE_Y, LIGHT_BLUE, true);
-        }
+        drawUtilityZone(graphics, getOpponentUtilityRectangle(OPPONENT_FRONT_Y), GRAVEYARD_GRAY, "GRAVEYARD");
+        drawUtilityZone(graphics, getOpponentUtilityRectangle(OPPONENT_BACK_Y), CARD_BACK_COLOR, "DECK");
+        drawUtilityZone(graphics, getPlayerUtilityRectangle(PLAYER_FRONT_Y), GRAVEYARD_GRAY, "GRAVEYARD");
+        drawUtilityZone(graphics, getPlayerUtilityRectangle(PLAYER_BACK_Y), CARD_BACK_COLOR, "DECK");
 
-        /*
-         * Opponent graveyard on LEFT.
-         */
-        Rectangle opponentGraveyard = getOpponentUtilityRectangle(OPPONENT_BROWN_Y);
-        drawUtilityZone(graphics, opponentGraveyard, GRAVEYARD_GRAY, "GRAVEYARD", Color.BLACK);
-
-        /*
-         * Opponent deck on LEFT.
-         */
-        Rectangle opponentDeck = getOpponentUtilityRectangle(OPPONENT_BLUE_Y);
-        drawUtilityZone(graphics, opponentDeck, DARK_BROWN, "DECK", Color.WHITE);
-
-        /*
-         * ==========================
-         * PLAYER SIDE
-         * ==========================
-         */
-
-        /*
-         * Player blue row.
-         */
-        for (int zone = 0; zone < 5; zone++) {
-            drawZone(graphics, zone, PLAYER_BLUE_Y, LIGHT_BLUE, false);
-        }
-
-        /*
-         * Player brown row.
-         */
-        for (int zone = 0; zone < 5; zone++) {
-            drawZone(graphics, zone, PLAYER_BROWN_Y, LIGHT_BROWN, false);
-        }
-
-        /*
-         * Player graveyard on RIGHT.
-         */
-        Rectangle playerGraveyard = getPlayerUtilityRectangle(PLAYER_BROWN_Y);
-        drawUtilityZone(graphics, playerGraveyard, GRAVEYARD_GRAY, "GRAVEYARD", Color.BLACK);
-
-        /*
-         * Player deck on RIGHT.
-         */
-        Rectangle playerDeck = getPlayerUtilityRectangle(PLAYER_BLUE_Y);
-        drawUtilityZone(graphics, playerDeck, DARK_BROWN, "DECK", Color.WHITE);
-
-        /*
-         * Center divider.
-         */
         graphics.setColor(Color.BLACK);
         graphics.setStroke(new BasicStroke(2));
-        graphics.drawLine(40, 435, BOARD_WIDTH - 40, 435);
+        graphics.drawLine(40, 400, BOARD_WIDTH - 40, 400);
 
-        /*
-         * Side labels.
-         */
         graphics.setFont(new Font("Arial", Font.BOLD, 14));
         graphics.drawString("OPPONENT", 10, 120);
-        graphics.drawString("YOU", 10, 780);
+        graphics.drawString("YOU", 10, 770);
     }
 
-    private void drawZone(Graphics2D graphics, int zone, int y, Color color, boolean opponent) {
-        Rectangle rectangle = opponent
-                ? getOpponentZoneRectangle(zone, y)
-                : getOwnZoneRectangle(zone, y);
-
+    private void drawZone(Graphics2D graphics, Rectangle rectangle, Color color) {
         graphics.setColor(color);
         graphics.fill(rectangle);
-        graphics.setColor(Color.BLACK);
+        graphics.setColor(Color.GRAY);
         graphics.draw(rectangle);
     }
 
-    private void drawUtilityZone(
-            Graphics2D graphics, Rectangle rectangle, Color background, String text, Color textColor) {
-
+    private void drawUtilityZone(Graphics2D graphics, Rectangle rectangle, Color background, String text) {
         graphics.setColor(background);
         graphics.fill(rectangle);
         graphics.setColor(Color.BLACK);
         graphics.draw(rectangle);
-        graphics.setColor(textColor);
-        graphics.setFont(new Font("Arial", Font.BOLD, 12));
+        graphics.setColor(background == GRAVEYARD_GRAY ? Color.BLACK : Color.WHITE);
+        graphics.setFont(new Font("Arial", Font.BOLD, 11));
         drawCenteredText(graphics, text, rectangle);
     }
 
     private void drawOpponentHand(Graphics2D graphics) {
-        /*
-         * Every opponent hand card is hidden.
-         */
-        int totalWidth = opponentHandCount * CARD_WIDTH + Math.max(0, opponentHandCount - 1) * 8;
-        int startX = (BOARD_WIDTH - totalWidth) / 2;
-
         for (int i = 0; i < opponentHandCount; i++) {
-            int x = startX + i * (CARD_WIDTH + 8);
-            Rectangle rectangle = new Rectangle(x, OPPONENT_HAND_Y, CARD_WIDTH, CARD_HEIGHT);
-
-            graphics.setColor(DARK_BROWN);
-            graphics.fill(rectangle);
-            graphics.setColor(Color.BLACK);
-            graphics.draw(rectangle);
-            graphics.setColor(Color.WHITE);
-            drawCenteredText(graphics, "CARD", rectangle);
+            Rectangle rectangle = getHandCardRectangle(
+                    i, opponentHandCount, OPPONENT_HAND_CARD_WIDTH, OPPONENT_HAND_CARD_HEIGHT,
+                    OPPONENT_HAND_GAP, OPPONENT_HAND_Y);
+            drawCardBack(graphics, rectangle);
         }
     }
 
     private void drawOwnHand(Graphics2D graphics) {
         for (int i = 0; i < ownHand.size(); i++) {
             ClientCard card = ownHand.get(i);
-
-            /*
-             * Don't draw the card twice while dragging.
-             */
-            if (card.id().equals(draggedCardId)) {
+            if (card == draggedCard) {
                 continue;
             }
-
-            Rectangle rectangle = getHandCardRectangle(i, ownHand.size());
-            drawCard(graphics, card, rectangle);
+            Rectangle rectangle = getHandCardRectangle(
+                    i, ownHand.size(), HAND_CARD_WIDTH, HAND_CARD_HEIGHT, HAND_GAP, PLAYER_HAND_Y);
+            CardRenderer.draw(graphics, rectangle, card, true);
         }
     }
 
-    private void drawPlayedCards(Graphics2D graphics) {
-        /*
-         * Own played cards.
-         */
-        for (ClientCard card : ownPlayed) {
-            if (card.id().equals(draggedCardId)) {
-                continue;
-            }
-            Rectangle rectangle = getPlayedCardRectangle(card, false);
-            drawCard(graphics, card, rectangle);
+    private void drawFrontZones(Graphics2D graphics) {
+        for (ClientUnit unit : ownFront) {
+            Rectangle zone = getOwnZoneRectangle(unit.zoneIndex(), PLAYER_FRONT_Y);
+            CardRenderer.draw(graphics, getFieldCardRectangle(zone), unit, false);
         }
-
-        /*
-         * Opponent played cards are revealed.
-         */
-        for (ClientCard card : opponentPlayed) {
-            Rectangle rectangle = getPlayedCardRectangle(card, true);
-            drawCard(graphics, card, rectangle);
+        for (ClientUnit unit : opponentFront) {
+            Rectangle zone = getOpponentZoneRectangle(unit.zoneIndex(), OPPONENT_FRONT_Y);
+            CardRenderer.draw(graphics, getFieldCardRectangle(zone), unit, false);
         }
     }
 
-    private void drawDraggedCard(Graphics2D graphics) {
-        Rectangle rectangle = new Rectangle(
-                mouseX - CARD_WIDTH / 2, mouseY - CARD_HEIGHT / 2, CARD_WIDTH, CARD_HEIGHT);
-
-        drawCard(graphics, draggedCard, rectangle);
+    private void drawBackZones(Graphics2D graphics) {
+        for (ClientTrap trap : ownBack) {
+            Rectangle zone = getOwnZoneRectangle(trap.zoneIndex(), PLAYER_BACK_Y);
+            CardRenderer.draw(graphics, getFieldCardRectangle(zone), trap, false);
+        }
+        for (int zoneIndex : opponentBackZones) {
+            Rectangle zone = getOpponentZoneRectangle(zoneIndex, OPPONENT_BACK_Y);
+            drawCardBack(graphics, getFieldCardRectangle(zone));
+        }
     }
 
-    private void drawCard(Graphics2D graphics, ClientCard card, Rectangle rectangle) {
-        graphics.setColor(card.type() == CardType.LIGHT_BROWN ? LIGHT_BROWN : LIGHT_BLUE);
+    private void drawCardBack(Graphics2D graphics, Rectangle rectangle) {
+        graphics.setColor(CARD_BACK_COLOR);
         graphics.fill(rectangle);
-        graphics.setColor(Color.BLACK);
-        graphics.draw(rectangle);
-        graphics.setFont(new Font("Arial", Font.BOLD, 11));
-
-        String text = card.type() == CardType.LIGHT_BROWN ? "BROWN" : "BLUE";
-        drawCenteredText(graphics, text, rectangle);
+        graphics.setColor(Color.WHITE);
+        graphics.setFont(new Font("Arial", Font.BOLD, 10));
+        drawCenteredText(graphics, "CARD", rectangle);
     }
+
+    private void drawCenteredText(Graphics2D graphics, String text, Rectangle rectangle) {
+        FontMetrics metrics = graphics.getFontMetrics();
+        int x = rectangle.x + (rectangle.width - metrics.stringWidth(text)) / 2;
+        int y = rectangle.y + (rectangle.height - metrics.getHeight()) / 2 + metrics.getAscent();
+        graphics.drawString(text, x, y);
+    }
+
+    /*
+     * ==========================================================
+     * Geometry
+     * ==========================================================
+     */
 
     private Rectangle getOwnZoneRectangle(int zone, int y) {
         /*
-         * Zone 0 is closest to YOUR graveyard.
-         *
-         * Your graveyard is on the right, therefore:
-         *
-         * zone 0 -> rightmost
-         * zone 4 -> leftmost
+         * Zone 0 sits closest to the player's own graveyard, on the right,
+         * so zone 0 is rightmost and zone 4 is leftmost.
          */
         int x = FIELD_LEFT + (4 - zone) * (ZONE_WIDTH + ZONE_GAP);
         return new Rectangle(x, y, ZONE_WIDTH, ZONE_HEIGHT);
@@ -542,77 +435,34 @@ public class BoardPanel extends JPanel {
 
     private Rectangle getOpponentZoneRectangle(int zone, int y) {
         /*
-         * Zone 0 is closest to the OPPONENT'S graveyard.
-         *
-         * Their graveyard is on the left from our perspective,
-         * therefore:
-         *
-         * zone 0 -> leftmost
-         * zone 4 -> rightmost
+         * The opponent's graveyard is on the left from our perspective, so
+         * their zone 0 is leftmost and zone 4 is rightmost.
          */
         int x = FIELD_LEFT + zone * (ZONE_WIDTH + ZONE_GAP);
         return new Rectangle(x, y, ZONE_WIDTH, ZONE_HEIGHT);
     }
 
-    /*
-     * Player's utility zones are on the RIGHT.
-     */
     private Rectangle getPlayerUtilityRectangle(int y) {
         int x = FIELD_LEFT + 5 * (ZONE_WIDTH + ZONE_GAP) + 8;
         return new Rectangle(x, y, ZONE_WIDTH, ZONE_HEIGHT);
     }
 
-    /*
-     * Opponent's utility zones are on the LEFT.
-     */
     private Rectangle getOpponentUtilityRectangle(int y) {
         int x = FIELD_LEFT - ZONE_WIDTH - 8;
         return new Rectangle(x, y, ZONE_WIDTH, ZONE_HEIGHT);
     }
 
-    private Rectangle getHandCardRectangle(int index, int cardCount) {
-        int totalWidth = cardCount * CARD_WIDTH + Math.max(0, cardCount - 1) * 8;
+    private Rectangle getFieldCardRectangle(Rectangle zone) {
+        int x = zone.x + (zone.width - FIELD_CARD_WIDTH) / 2;
+        int y = zone.y + (zone.height - FIELD_CARD_HEIGHT) / 2;
+        return new Rectangle(x, y, FIELD_CARD_WIDTH, FIELD_CARD_HEIGHT);
+    }
+
+    private Rectangle getHandCardRectangle(
+            int index, int count, int cardWidth, int cardHeight, int gap, int y) {
+
+        int totalWidth = count * cardWidth + Math.max(0, count - 1) * gap;
         int startX = (BOARD_WIDTH - totalWidth) / 2;
-
-        return new Rectangle(startX + index * (CARD_WIDTH + 8), PLAYER_HAND_Y, CARD_WIDTH, CARD_HEIGHT);
-    }
-
-    private Rectangle getPlayedCardRectangle(ClientCard card, boolean opponent) {
-        /*
-         * Brown = closer to center
-         * Blue = farther away
-         * (same convention for both sides)
-         */
-        int y = opponent
-                ? (card.type() == CardType.LIGHT_BROWN ? OPPONENT_BROWN_Y : OPPONENT_BLUE_Y)
-                : (card.type() == CardType.LIGHT_BROWN ? PLAYER_BROWN_Y : PLAYER_BLUE_Y);
-
-        Rectangle zone = opponent
-                ? getOpponentZoneRectangle(card.zoneIndex(), y)
-                : getOwnZoneRectangle(card.zoneIndex(), y);
-
-        int x = zone.x + (ZONE_WIDTH - CARD_WIDTH) / 2;
-        int cardY = zone.y + (ZONE_HEIGHT - CARD_HEIGHT) / 2;
-
-        return new Rectangle(x, cardY, CARD_WIDTH, CARD_HEIGHT);
-    }
-
-    private void drawCenteredText(Graphics2D graphics, String text, Rectangle rectangle) {
-        FontMetrics metrics = graphics.getFontMetrics();
-        int x = rectangle.x + (rectangle.width - metrics.stringWidth(text)) / 2;
-        int y = rectangle.y + (rectangle.height - metrics.getHeight()) / 2 + metrics.getAscent();
-
-        graphics.drawString(text, x, y);
-    }
-
-    public enum DropZoneType {
-        BROWN,
-        BLUE
-    }
-
-    public record DropTarget(DropZoneType type, int zoneIndex) {
-    }
-
-    public record CardMove(String cardId, DropZoneType targetType, int targetZone) {
+        return new Rectangle(startX + index * (cardWidth + gap), y, cardWidth, cardHeight);
     }
 }

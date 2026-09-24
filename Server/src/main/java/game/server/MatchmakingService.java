@@ -1,10 +1,22 @@
 package game.server;
 
+import game.server.cards.Unit;
+
 import java.util.ArrayDeque;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Queue;
 
+/**
+ * Protocol v2 message formats handled here:
+ *
+ * <pre>
+ * PLAY_UNIT|cardId|zoneIndex
+ * PLAY_SPELL|cardId|targetUnitId   (targetUnitId is "-" for no target)
+ * PLAY_TRAP|cardId|zoneIndex
+ * END_TURN
+ * </pre>
+ */
 public class MatchmakingService {
 
     private final Queue<PlayerConnection> waitingPlayers = new ArrayDeque<>();
@@ -13,7 +25,7 @@ public class MatchmakingService {
 
     private int nextMatchId = 1;
 
-    public synchronized void addPlayer(PlayerConnection player) {
+    public synchronized void addPlayer(PlayerConnection connection) {
         while (!waitingPlayers.isEmpty()) {
             PlayerConnection opponent = waitingPlayers.poll();
             if (!opponent.isConnected()) {
@@ -21,14 +33,14 @@ public class MatchmakingService {
             }
 
             int matchId = nextMatchId++;
-            Match match = new Match(matchId, opponent, player);
+            Match match = new Match(matchId, opponent, connection);
 
             activeMatches.put(matchId, match);
             playerMatches.put(opponent, match);
-            playerMatches.put(player, match);
+            playerMatches.put(connection, match);
 
             opponent.send("MATCH:" + matchId + ":PLAYER1");
-            player.send("MATCH:" + matchId + ":PLAYER2");
+            connection.send("MATCH:" + matchId + ":PLAYER2");
 
             broadcastState(match);
 
@@ -37,78 +49,99 @@ public class MatchmakingService {
             return;
         }
 
-        waitingPlayers.add(player);
-        player.send("WAITING");
+        waitingPlayers.add(connection);
+        connection.send("WAITING");
         System.out.println("Player is waiting for an opponent.");
     }
 
-    public synchronized void handleMessage(PlayerConnection player, String message) {
-        Match match = playerMatches.get(player);
+    public synchronized void handleMessage(PlayerConnection connection, String message) {
+        Match match = playerMatches.get(connection);
         if (match == null || !match.isActive()) {
             return;
         }
 
-        if (message.startsWith("MOVE_CARD|")) {
-            handleCardMove(player, match, message);
+        Player player = match.getPlayerFor(connection);
+        if (player == null) {
             return;
         }
 
+        if (message.startsWith("PLAY_UNIT|")) {
+            handlePlayUnit(player, match, message);
+            return;
+        }
+        if (message.startsWith("PLAY_SPELL|")) {
+            handlePlaySpell(player, match, message);
+            return;
+        }
+        if (message.startsWith("PLAY_TRAP|")) {
+            handlePlayTrap(player, match, message);
+            return;
+        }
         if (message.equals("END_TURN")) {
-            boolean changed = match.endTurn(player);
-
-            /*
-             * Whether the turn changed or not,
-             * send authoritative state back.
-             */
-            if (changed) {
-                System.out.println("Match " + match.getId() + ": Player "
-                        + match.getPlayerNumber(player) + " ended their turn.");
-            }
-
+            match.endTurn(player);
             broadcastState(match);
+            checkForGameOver(match);
             return;
         }
 
         System.out.println("Unknown message: " + message);
     }
 
-    private void handleCardMove(PlayerConnection player, Match match, String message) {
+    private void handlePlayUnit(Player player, Match match, String message) {
         try {
-            /*
-             * MOVE_CARD|cardId|BROWN|2
-             */
             String[] parts = message.split("\\|");
-            if (parts.length != 4) {
+            if (parts.length != 3) {
                 return;
             }
 
             String cardId = parts[1];
-            CardType targetType;
+            int zoneIndex = Integer.parseInt(parts[2]);
 
-            if (parts[2].equals("BROWN")) {
-                targetType = CardType.LIGHT_BROWN;
-            } else if (parts[2].equals("BLUE")) {
-                targetType = CardType.LIGHT_BLUE;
-            } else {
+            boolean played = match.playUnit(player, cardId, zoneIndex);
+            System.out.println(played ? "Unit play accepted." : "Unit play rejected.");
+
+            broadcastState(match);
+            checkForGameOver(match);
+
+        } catch (NumberFormatException e) {
+            System.out.println("Invalid unit play: " + message);
+        }
+    }
+
+    private void handlePlaySpell(Player player, Match match, String message) {
+        String[] parts = message.split("\\|");
+        if (parts.length != 3) {
+            return;
+        }
+
+        String cardId = parts[1];
+        String targetId = parts[2];
+        Unit target = targetId.equals("-") ? null : match.findUnitOnField(targetId);
+
+        boolean played = match.playSpell(player, cardId, target);
+        System.out.println(played ? "Spell play accepted." : "Spell play rejected.");
+
+        broadcastState(match);
+        checkForGameOver(match);
+    }
+
+    private void handlePlayTrap(Player player, Match match, String message) {
+        try {
+            String[] parts = message.split("\\|");
+            if (parts.length != 3) {
                 return;
             }
 
-            int targetZone = Integer.parseInt(parts[3]);
-            boolean moved = match.moveCard(player, cardId, targetType, targetZone);
+            String cardId = parts[1];
+            int zoneIndex = Integer.parseInt(parts[2]);
 
-            System.out.println(moved ? "Card move accepted." : "Card move rejected.");
+            boolean played = match.playTrap(player, cardId, zoneIndex);
+            System.out.println(played ? "Trap play accepted." : "Trap play rejected.");
 
-            /*
-             * Always send the authoritative state.
-             *
-             * If the client made an invalid move,
-             * this effectively makes it snap back.
-             */
             broadcastState(match);
 
         } catch (NumberFormatException e) {
-            System.out.println("Invalid card movement: " + message);
-            broadcastState(match);
+            System.out.println("Invalid trap play: " + message);
         }
     }
 
@@ -117,27 +150,50 @@ public class MatchmakingService {
         match.getPlayer2().send(match.buildStateFor(match.getPlayer2()));
     }
 
-    public synchronized void removePlayerFromMatch(PlayerConnection player) {
-        if (waitingPlayers.remove(player)) {
+    /*
+     * Health-based win condition, checked after anything that can deal
+     * damage (a unit attack or a damage spell).
+     */
+    private void checkForGameOver(Match match) {
+        Player defeated = match.getDefeatedPlayer();
+        if (defeated == null) {
+            return;
+        }
+
+        Player winner = match.getOpponent(defeated);
+        winner.send("YOU_WIN");
+        defeated.send("YOU_LOSE");
+
+        match.endMatch();
+        activeMatches.remove(match.getId());
+        playerMatches.remove(winner.getConnection());
+        playerMatches.remove(defeated.getConnection());
+
+        System.out.println("Match " + match.getId() + " ended by defeat.");
+    }
+
+    public synchronized void removePlayerFromMatch(PlayerConnection connection) {
+        if (waitingPlayers.remove(connection)) {
             System.out.println("Waiting player disconnected.");
             return;
         }
 
-        Match match = playerMatches.remove(player);
+        Match match = playerMatches.remove(connection);
         if (match == null) {
             return;
         }
 
-        PlayerConnection opponent = match.getOpponent(player);
-        match.endMatch();
+        Player player = match.getPlayerFor(connection);
+        Player opponent = match.getOpponent(player);
 
-        playerMatches.remove(opponent);
+        match.endMatch();
+        playerMatches.remove(opponent.getConnection());
         activeMatches.remove(match.getId());
 
         System.out.println("Player " + match.getPlayerNumber(player)
                 + " disconnected from Match " + match.getId());
 
-        if (opponent != null && opponent.isConnected()) {
+        if (opponent.isConnected()) {
             opponent.send("YOU_WIN");
             System.out.println("Player " + match.getPlayerNumber(opponent) + " wins.");
         }

@@ -10,8 +10,16 @@ import java.util.function.Consumer;
 
 public class BoardPanel extends JPanel {
 
-    private static final int BOARD_WIDTH = 760;
-    private static final int BOARD_HEIGHT = 900;
+    /*
+     * All of the geometry in this class is expressed in a fixed "design"
+     * coordinate space (roughly the size the board looked good at
+     * originally). paintComponent scales and centers that design onto
+     * whatever size the panel actually is - see computeScale() - so every
+     * drawing/hit-testing method below can keep pretending the panel is
+     * exactly BASE_WIDTH x BASE_HEIGHT and never has to know the real size.
+     */
+    private static final int BASE_WIDTH = 760;
+    private static final int BASE_HEIGHT = 900;
 
     /*
      * The five playable columns, shared by both players' front (unit) and
@@ -79,7 +87,7 @@ public class BoardPanel extends JPanel {
     public BoardPanel(Consumer<PlayAction> playListener) {
         this.playListener = playListener;
 
-        setPreferredSize(new Dimension(BOARD_WIDTH, BOARD_HEIGHT));
+        setPreferredSize(new Dimension(BASE_WIDTH, BASE_HEIGHT));
         setBackground(new Color(235, 235, 235));
         setBorder(BorderFactory.createLineBorder(Color.BLACK, 2));
 
@@ -87,7 +95,8 @@ public class BoardPanel extends JPanel {
 
             @Override
             public void mousePressed(MouseEvent e) {
-                startDragging(e.getX(), e.getY());
+                Point board = toBoardPoint(e.getX(), e.getY());
+                startDragging(board.x, board.y);
             }
 
             @Override
@@ -95,19 +104,53 @@ public class BoardPanel extends JPanel {
                 if (draggedCard == null) {
                     return;
                 }
-                mouseX = e.getX();
-                mouseY = e.getY();
+                Point board = toBoardPoint(e.getX(), e.getY());
+                mouseX = board.x;
+                mouseY = board.y;
                 repaint();
             }
 
             @Override
             public void mouseReleased(MouseEvent e) {
-                finishDragging(e.getX(), e.getY());
+                Point board = toBoardPoint(e.getX(), e.getY());
+                finishDragging(board.x, board.y);
             }
         };
 
         addMouseListener(mouseAdapter);
         addMouseMotionListener(mouseAdapter);
+    }
+
+    /*
+     * How much the design is currently scaled up/down to fit the panel,
+     * preserving its aspect ratio (the board is "letterboxed", not
+     * stretched, so cards never look squashed).
+     */
+    private double computeScale() {
+        double scaleX = getWidth() / (double) BASE_WIDTH;
+        double scaleY = getHeight() / (double) BASE_HEIGHT;
+        return Math.max(0.01, Math.min(scaleX, scaleY));
+    }
+
+    private double computeOffsetX(double scale) {
+        return (getWidth() - BASE_WIDTH * scale) / 2.0;
+    }
+
+    private double computeOffsetY(double scale) {
+        return (getHeight() - BASE_HEIGHT * scale) / 2.0;
+    }
+
+    /*
+     * Converts a real mouse position into the design coordinate space, the
+     * inverse of the transform paintComponent applies before drawing. Every
+     * hit-testing method below works purely in design coordinates, so
+     * mouse handling only ever needs this one conversion up front.
+     */
+    private Point toBoardPoint(int screenX, int screenY) {
+        double scale = computeScale();
+        int boardX = (int) Math.round((screenX - computeOffsetX(scale)) / scale);
+        int boardY = (int) Math.round((screenY - computeOffsetY(scale)) / scale);
+        return new Point(boardX, boardY);
     }
 
     public void updateState(
@@ -227,7 +270,7 @@ public class BoardPanel extends JPanel {
 
         if (draggedCard instanceof ClientSpell spell
                 && spell.spellType() == SpellType.SPECIAL
-                && new Rectangle(0, 0, BOARD_WIDTH, BOARD_HEIGHT).contains(x, y)) {
+                && new Rectangle(0, 0, BASE_WIDTH, BASE_HEIGHT).contains(x, y)) {
             return new PlayAction.SpellCast(spell.id(), null);
         }
 
@@ -305,6 +348,15 @@ public class BoardPanel extends JPanel {
         Graphics2D graphics = (Graphics2D) g.create();
         graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 
+        /*
+         * Everything from here down is drawn in design coordinates
+         * (0..BASE_WIDTH, 0..BASE_HEIGHT); this transform is what makes it
+         * land in the right place, at the right size, on the real panel.
+         */
+        double scale = computeScale();
+        graphics.translate(computeOffsetX(scale), computeOffsetY(scale));
+        graphics.scale(scale, scale);
+
         drawBoard(graphics);
         drawOpponentHand(graphics);
         drawOwnHand(graphics);
@@ -336,7 +388,7 @@ public class BoardPanel extends JPanel {
 
         graphics.setColor(Color.BLACK);
         graphics.setStroke(new BasicStroke(2));
-        graphics.drawLine(40, 400, BOARD_WIDTH - 40, 400);
+        graphics.drawLine(40, 400, BASE_WIDTH - 40, 400);
 
         graphics.setFont(new Font("Arial", Font.BOLD, 14));
         graphics.drawString("OPPONENT", 10, 120);
@@ -462,7 +514,7 @@ public class BoardPanel extends JPanel {
             int index, int count, int cardWidth, int cardHeight, int gap, int y) {
 
         int totalWidth = count * cardWidth + Math.max(0, count - 1) * gap;
-        int startX = (BOARD_WIDTH - totalWidth) / 2;
+        int startX = (BASE_WIDTH - totalWidth) / 2;
         return new Rectangle(startX + index * (cardWidth + gap), y, cardWidth, cardHeight);
     }
 }

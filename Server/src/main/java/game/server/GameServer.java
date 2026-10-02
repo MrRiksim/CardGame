@@ -23,7 +23,14 @@ public class GameServer extends WebSocketServer {
         System.out.println("New connection from: " + connection.getRemoteSocketAddress());
         PlayerConnection player = new PlayerConnection(connection);
         players.put(connection, player);
-        matchmakingService.addPlayer(player);
+
+        /*
+         * Matchmaking no longer starts automatically on connect - the
+         * client picks a game mode first and queues itself with a
+         * JOIN|<mode> message, handled by matchmakingService.handleMessage
+         * below. This is what stops a Standard player and a Chaos player
+         * from ever being paired together.
+         */
     }
 
     @Override

@@ -171,9 +171,18 @@ public class BoardPanel extends JPanel {
         this.yourTurn = yourTurn;
 
         /*
-         * The server state is authoritative - any in-flight drag is stale.
+         * Deliberately NOT clearing draggedCard here. A timed match's
+         * clock broadcasts a fresh STATE once a second even when nothing
+         * about the board actually changed (see Match's turn-clock
+         * methods), and this method runs on every one of those - clearing
+         * an in-progress drag here would yank the card back to the hand
+         * mid-drag the instant a second ticks over. finishDragging already
+         * clears it the moment a drop actually resolves, which is the
+         * only time it truly needs to go; drawOwnHand below excludes the
+         * dragged card from the hand by id, not by object identity, since
+         * every state update rebuilds fresh card objects even when
+         * nothing changed.
          */
-        draggedCard = null;
         repaint();
     }
 
@@ -424,9 +433,18 @@ public class BoardPanel extends JPanel {
     private void drawOwnHand(Graphics2D graphics) {
         for (int i = 0; i < ownHand.size(); i++) {
             ClientCard card = ownHand.get(i);
-            if (card == draggedCard) {
+
+            /*
+             * By id, not reference - updateState rebuilds the hand as
+             * brand new card objects on every refresh, including the
+             * once-a-second refreshes a timed match's clock triggers,
+             * so draggedCard (captured back in startDragging) is never
+             * literally the same object as anything in a later ownHand.
+             */
+            if (draggedCard != null && card.id().equals(draggedCard.id())) {
                 continue;
             }
+
             Rectangle rectangle = getHandCardRectangle(
                     i, ownHand.size(), HAND_CARD_WIDTH, HAND_CARD_HEIGHT, HAND_GAP, PLAYER_HAND_Y);
             CardRenderer.draw(graphics, rectangle, card, true);

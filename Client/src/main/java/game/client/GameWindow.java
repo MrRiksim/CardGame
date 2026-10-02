@@ -12,10 +12,12 @@ public class GameWindow {
     private final JLabel statsLabel;
     private final JLabel statusLabel;
     private final JButton endTurnButton;
+    private final JPanel modeSelectPanel;
     private final BoardPanel boardPanel;
 
     private GameClient client;
     private boolean gameOver = false;
+    private boolean inMatch = false;
 
     public GameWindow() {
         frame = new JFrame("Card Game");
@@ -40,6 +42,8 @@ public class GameWindow {
         topPanel.add(statsLabel);
         topPanel.add(statusLabel);
 
+        modeSelectPanel = buildModeSelectPanel();
+
         boardPanel = new BoardPanel(this::sendPlayAction);
         boardPanel.setVisible(false);
 
@@ -56,18 +60,71 @@ public class GameWindow {
 
         frame.setLayout(new BorderLayout());
         frame.add(topPanel, BorderLayout.NORTH);
-        frame.add(boardPanel, BorderLayout.CENTER);
+        frame.add(modeSelectPanel, BorderLayout.CENTER);
         frame.add(bottomPanel, BorderLayout.SOUTH);
         frame.setVisible(true);
+    }
+
+    private JPanel buildModeSelectPanel() {
+        JPanel panel = new JPanel(new GridLayout(3, 1, 12, 12));
+        panel.setBorder(BorderFactory.createEmptyBorder(40, 60, 40, 60));
+
+        panel.add(createModeButton(
+                "Standard Match",
+                "25 health, 6 starting energy, +2 energy and a card each turn.",
+                GameMode.STANDARD));
+        panel.add(createModeButton(
+                "Speed Match",
+                "Standard rules, but each player has 10 minutes total - run out and you lose.",
+                GameMode.SPEED));
+        panel.add(createModeButton(
+                "Chaos Match",
+                "Health, energy, hand size - everything is randomized. Might even be timed.",
+                GameMode.CHAOS));
+
+        return panel;
+    }
+
+    private JButton createModeButton(String title, String description, GameMode mode) {
+        JButton button = new JButton(
+                "<html><div style='text-align:center'><b style='font-size:14px'>" + title
+                        + "</b><br>" + description + "</div></html>");
+        button.addActionListener(e -> chooseMode(mode));
+        return button;
+    }
+
+    private void chooseMode(GameMode mode) {
+        if (client == null) {
+            return;
+        }
+
+        frame.remove(modeSelectPanel);
+        frame.add(boardPanel, BorderLayout.CENTER);
+
+        client.joinQueue(mode);
+        statusLabel.setText("Waiting for opponent...");
+
+        frame.revalidate();
+        frame.repaint();
     }
 
     public void setClient(GameClient client) {
         this.client = client;
     }
 
+    /*
+     * Shown once the socket actually connects - the player picks a mode
+     * from modeSelectPanel (already on screen since construction) before
+     * anything gets queued server-side.
+     */
+    public void showModeSelect() {
+        SwingUtilities.invokeLater(() -> statusLabel.setText("Choose a match type to begin."));
+    }
+
     public void setWaiting() {
         SwingUtilities.invokeLater(() -> {
             gameOver = false;
+            inMatch = false;
             matchLabel.setText("");
             turnLabel.setText("");
             statsLabel.setText("");
@@ -83,6 +140,7 @@ public class GameWindow {
     public void showMatch(int matchId) {
         SwingUtilities.invokeLater(() -> {
             gameOver = false;
+            inMatch = true;
             matchLabel.setText("Match " + matchId);
             statusLabel.setText("Match started");
             turnLabel.setText("Waiting for game state...");
@@ -104,14 +162,16 @@ public class GameWindow {
             List<ClientUnit> opponentFront,
             List<ClientTrap> ownBack,
             List<Integer> opponentBackZones,
+            Integer ownSecondsLeft,
+            Integer opponentSecondsLeft,
             boolean yourTurn) {
 
         SwingUtilities.invokeLater(() -> {
             gameOver = false;
+            inMatch = true;
             matchLabel.setText("Match " + matchId);
-            statsLabel.setText(
-                    "You: " + ownHealth + " HP, " + ownEnergy + " energy    |    Opponent: "
-                            + opponentHealth + " HP");
+            statsLabel.setText(buildStatsText(
+                    ownHealth, ownEnergy, opponentHealth, ownSecondsLeft, opponentSecondsLeft));
 
             boardPanel.setVisible(true);
             boardPanel.updateState(
@@ -133,6 +193,27 @@ public class GameWindow {
         });
     }
 
+    private String buildStatsText(
+            int ownHealth, int ownEnergy, int opponentHealth,
+            Integer ownSecondsLeft, Integer opponentSecondsLeft) {
+
+        String text = "You: " + ownHealth + " HP, " + ownEnergy + " energy"
+                + formatClock(ownSecondsLeft)
+                + "    |    Opponent: " + opponentHealth + " HP" + formatClock(opponentSecondsLeft);
+        return text;
+    }
+
+    /*
+     * Empty string for an untimed match - ownSecondsLeft/opponentSecondsLeft
+     * are only ever non-null when this match actually has a clock.
+     */
+    private String formatClock(Integer secondsLeft) {
+        if (secondsLeft == null) {
+            return "";
+        }
+        return String.format(", %d:%02d left", secondsLeft / 60, secondsLeft % 60);
+    }
+
     public void showWin() {
         SwingUtilities.invokeLater(() -> {
             gameOver = true;
@@ -152,7 +233,7 @@ public class GameWindow {
             boardPanel.setGameOver();
             boardPanel.setVisible(true);
             turnLabel.setText("YOU LOSE");
-            statusLabel.setText("Your health reached zero.");
+            statusLabel.setText("Your health - or your clock - reached zero.");
             endTurnButton.setEnabled(false);
             frame.revalidate();
             frame.repaint();
@@ -188,7 +269,7 @@ public class GameWindow {
     }
 
     private void sendPlayAction(PlayAction action) {
-        if (client == null || gameOver) {
+        if (client == null || gameOver || !inMatch) {
             return;
         }
 

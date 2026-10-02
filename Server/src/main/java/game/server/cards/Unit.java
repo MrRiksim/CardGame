@@ -26,10 +26,28 @@ public abstract class Unit extends Card {
             Element element,
             String clan) {
 
+        this(name, description, energyCost, health, health, damage, element, clan);
+    }
+
+    /*
+     * Lets a current health different from max health be set up front -
+     * used by UnitBuff, which snapshots a unit that may already be
+     * damaged when the buff is applied.
+     */
+    protected Unit(
+            String name,
+            String description,
+            int energyCost,
+            int health,
+            int maxHealth,
+            int damage,
+            Element element,
+            String clan) {
+
         super(name, description, energyCost);
 
-        this.maxHealth = health;
         this.health = health;
+        this.maxHealth = maxHealth;
         this.damage = damage;
         this.element = element;
         this.clan = clan;
@@ -69,5 +87,17 @@ public abstract class Unit extends Card {
 
     public boolean isDead() {
         return health <= 0;
+    }
+
+    /*
+     * For a plain unit, itself. UnitBuff overrides this to walk back
+     * through every stacked layer to the original card underneath - see
+     * the note there and on Match.serializeFront for why that matters:
+     * a buff's OWN name/cost (e.g. "Armor", cost 1) is correct for its
+     * eventual graveyard entry, but wrong for what the unit should be
+     * displayed and identified as while the buff is still active.
+     */
+    public Unit getBaseUnit() {
+        return this;
     }
 }

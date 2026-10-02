@@ -3,37 +3,76 @@ package game.server;
 import game.server.cards.Unit;
 
 import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Queue;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 /**
- * Protocol v2 message formats handled here:
+ * Protocol v3 message formats handled here:
  *
  * <pre>
+ * JOIN|mode                        (STANDARD, SPEED or CHAOS - sent once,
+ *                                    before anything else, to pick a queue)
  * PLAY_UNIT|cardId|zoneIndex
  * PLAY_SPELL|cardId|targetUnitId   (targetUnitId is "-" for no target)
  * PLAY_TRAP|cardId|zoneIndex
  * END_TURN
  * </pre>
+ *
+ * <p>Each {@link GameMode} gets its own, completely separate waiting
+ * queue, so a player is only ever matched against someone who picked the
+ * same mode - pairing a Chaos player's randomized rules with a Standard
+ * opponent wouldn't make sense half-applied to only one side of the
+ * match. The resolved {@link MatchSettings} for a match are assembled
+ * fresh via {@link MatchSettingsDirector} once two same-mode players are
+ * paired - see the Builder pattern notes on {@link MatchBuilder}.
  */
 public class MatchmakingService {
 
-    private final Queue<PlayerConnection> waitingPlayers = new ArrayDeque<>();
+    private final Map<GameMode, Queue<PlayerConnection>> waitingPlayers = new EnumMap<>(GameMode.class);
     private final Map<Integer, Match> activeMatches = new HashMap<>();
     private final Map<PlayerConnection, Match> playerMatches = new HashMap<>();
+    private final MatchSettingsDirector settingsDirector = new MatchSettingsDirector();
 
     private int nextMatchId = 1;
 
-    public synchronized void addPlayer(PlayerConnection connection) {
-        while (!waitingPlayers.isEmpty()) {
-            PlayerConnection opponent = waitingPlayers.poll();
+    public MatchmakingService() {
+        for (GameMode mode : GameMode.values()) {
+            waitingPlayers.put(mode, new ArrayDeque<>());
+        }
+
+        /*
+         * Only a timed match ever needs checking, but polling every active
+         * match once a second is cheap, and it's what lets a player lose
+         * the moment their clock runs out even if they never send another
+         * message (see Match.getDefeatedPlayer).
+         */
+        ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(runnable -> {
+            Thread thread = new Thread(runnable, "match-timeout-checker");
+            thread.setDaemon(true);
+            return thread;
+        });
+        scheduler.scheduleAtFixedRate(this::checkAllMatchesForTimeout, 1, 1, TimeUnit.SECONDS);
+    }
+
+    public synchronized void addPlayer(PlayerConnection connection, GameMode mode) {
+        Queue<PlayerConnection> queue = waitingPlayers.get(mode);
+
+        while (!queue.isEmpty()) {
+            PlayerConnection opponent = queue.poll();
             if (!opponent.isConnected()) {
                 continue;
             }
 
             int matchId = nextMatchId++;
-            Match match = new Match(matchId, opponent, connection);
+            MatchSettings settings = settingsDirector.direct(createBuilder(mode));
+            Match match = new Match(matchId, opponent, connection, settings);
 
             activeMatches.put(matchId, match);
             playerMatches.put(opponent, match);
@@ -44,17 +83,30 @@ public class MatchmakingService {
 
             broadcastState(match);
 
-            System.out.println("Created Match " + matchId);
+            System.out.println("Created " + mode + " Match " + matchId);
             System.out.println("First turn: Player " + match.getCurrentTurnPlayerNumber());
             return;
         }
 
-        waitingPlayers.add(connection);
+        queue.add(connection);
         connection.send("WAITING");
-        System.out.println("Player is waiting for an opponent.");
+        System.out.println("Player is waiting for a " + mode + " opponent.");
+    }
+
+    private MatchBuilder createBuilder(GameMode mode) {
+        return switch (mode) {
+            case STANDARD -> new StandardMatchBuilder();
+            case SPEED -> new SpeedMatchBuilder();
+            case CHAOS -> new ChaosMatchBuilder();
+        };
     }
 
     public synchronized void handleMessage(PlayerConnection connection, String message) {
+        if (message.startsWith("JOIN|")) {
+            handleJoin(connection, message);
+            return;
+        }
+
         Match match = playerMatches.get(connection);
         if (match == null || !match.isActive()) {
             return;
@@ -85,6 +137,23 @@ public class MatchmakingService {
         }
 
         System.out.println("Unknown message: " + message);
+    }
+
+    private void handleJoin(PlayerConnection connection, String message) {
+        String[] parts = message.split("\\|");
+        if (parts.length != 2) {
+            return;
+        }
+
+        GameMode mode;
+        try {
+            mode = GameMode.valueOf(parts[1]);
+        } catch (IllegalArgumentException e) {
+            System.out.println("Invalid game mode: " + parts[1]);
+            return;
+        }
+
+        addPlayer(connection, mode);
     }
 
     private void handlePlayUnit(Player player, Match match, String message) {
@@ -151,8 +220,9 @@ public class MatchmakingService {
     }
 
     /*
-     * Health-based win condition, checked after anything that can deal
-     * damage (a unit attack or a damage spell).
+     * Health-based defeat, or a timed match's clock running out, checked
+     * after anything that can deal damage or spend time (a unit attack, a
+     * damage spell, ending a turn, or this service's own periodic poll).
      */
     private void checkForGameOver(Match match) {
         Player defeated = match.getDefeatedPlayer();
@@ -172,10 +242,26 @@ public class MatchmakingService {
         System.out.println("Match " + match.getId() + " ended by defeat.");
     }
 
+    /*
+     * A timed match's clock can run out without either player sending a
+     * message (they simply never acted), so this is the only thing that
+     * catches that case - everything else is reactive to a message.
+     */
+    private synchronized void checkAllMatchesForTimeout() {
+        for (Match match : new ArrayList<>(activeMatches.values())) {
+            if (match.isActive() && match.hasTimer()) {
+                broadcastState(match);
+                checkForGameOver(match);
+            }
+        }
+    }
+
     public synchronized void removePlayerFromMatch(PlayerConnection connection) {
-        if (waitingPlayers.remove(connection)) {
-            System.out.println("Waiting player disconnected.");
-            return;
+        for (Queue<PlayerConnection> queue : waitingPlayers.values()) {
+            if (queue.remove(connection)) {
+                System.out.println("Waiting player disconnected.");
+                return;
+            }
         }
 
         Match match = playerMatches.remove(connection);

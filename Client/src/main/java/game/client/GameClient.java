@@ -23,7 +23,11 @@ public class GameClient extends WebSocketClient {
     public void onOpen(ServerHandshake handshake) {
         hasConnected = true;
         System.out.println("Connected to server.");
-        window.setWaiting();
+        /*
+         * No auto-queue anymore - the server waits for a JOIN|<mode>
+         * message (see joinQueue) once the player picks a match type.
+         */
+        window.showModeSelect();
     }
 
     @Override
@@ -77,14 +81,15 @@ public class GameClient extends WebSocketClient {
     /*
      * STATE|matchId|turnPlayer|ownHealth|opponentHealth|ownEnergy|
      *       ownHand|opponentHandCount|ownFront|opponentFront|
-     *       ownBack|opponentBackZones
+     *       ownBack|opponentBackZones|ownSecondsLeft|opponentSecondsLeft
      *
-     * See Match.buildStateFor (server) for the full field-by-field format.
+     * The last two are "-" (parsed here as null) for a match with no
+     * clock. See Match.buildStateFor (server) for the full format.
      */
     private void handleStateMessage(String message) {
         try {
             String[] parts = message.split("\\|", -1);
-            if (parts.length != 12) {
+            if (parts.length != 14) {
                 return;
             }
 
@@ -99,6 +104,8 @@ public class GameClient extends WebSocketClient {
             List<ClientUnit> opponentFront = parseFront(parts[9]);
             List<ClientTrap> ownBack = parseOwnBack(parts[10]);
             List<Integer> opponentBackZones = parseZoneList(parts[11]);
+            Integer ownSecondsLeft = parseSeconds(parts[12]);
+            Integer opponentSecondsLeft = parseSeconds(parts[13]);
 
             boolean yourTurn = turnPlayer == myPlayerNumber;
 
@@ -113,6 +120,8 @@ public class GameClient extends WebSocketClient {
                     opponentFront,
                     ownBack,
                     opponentBackZones,
+                    ownSecondsLeft,
+                    opponentSecondsLeft,
                     yourTurn
             );
 
@@ -120,6 +129,10 @@ public class GameClient extends WebSocketClient {
             System.err.println("Invalid STATE message: " + message);
             e.printStackTrace();
         }
+    }
+
+    private Integer parseSeconds(String value) {
+        return value.equals("-") ? null : Integer.parseInt(value);
     }
 
     private List<ClientCard> parseHand(String data) {
@@ -262,6 +275,13 @@ public class GameClient extends WebSocketClient {
         } catch (IllegalArgumentException e) {
             return SpellType.SPECIAL;
         }
+    }
+
+    public void joinQueue(GameMode mode) {
+        if (!isOpen()) {
+            return;
+        }
+        send("JOIN|" + mode.name());
     }
 
     public void playUnit(String cardId, int zoneIndex) {

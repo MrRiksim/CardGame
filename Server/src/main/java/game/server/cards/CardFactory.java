@@ -1,5 +1,7 @@
 package game.server.cards;
 
+import game.server.cards.spells.ArmorSpell;
+import game.server.cards.spells.DamagePotionSpell;
 import game.server.cards.spells.LightningStrike;
 import game.server.cards.traps.BearTrap;
 import game.server.cards.units.Knight;
@@ -19,17 +21,22 @@ import java.util.function.Supplier;
  * the "creator" that calls one of those methods without needing to know the
  * concrete constructors. Adding a new card to the game means writing the
  * class and adding one line to {@link #CARD_POOL}; nothing else changes.
+ * Note that the two buff spells never hand out a {@code UnitBuff} here -
+ * that's a decorator created only when the spell is actually cast (see
+ * {@code ArmorSpell.apply}), never something drawn into a hand.
  *
  * <p>For now every card is equally likely and hands/draws simply pick at
- * random from the three example cards; a real deck-building system can
- * replace {@link #CARD_POOL} later without touching any calling code.
+ * random from the cards below; a real deck-building system can replace
+ * {@link #CARD_POOL} later without touching any calling code.
  */
 public class CardFactory {
 
     private static final List<Supplier<Card>> CARD_POOL = List.of(
             Knight::create,
             LightningStrike::create,
-            BearTrap::create
+            BearTrap::create,
+            ArmorSpell::create,
+            DamagePotionSpell::create
     );
 
     private CardFactory() {

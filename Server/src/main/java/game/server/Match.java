@@ -2,8 +2,10 @@ package game.server;
 
 import game.server.cards.Card;
 import game.server.cards.Spell;
+import game.server.cards.SpellType;
 import game.server.cards.Trap;
 import game.server.cards.Unit;
+import game.server.cards.UnitBuff;
 
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -12,10 +14,12 @@ import java.util.concurrent.ThreadLocalRandom;
  * ending turns, resolving the end-of-turn attack phase and checking trap
  * activations.
  *
- * <p>Rules implemented here: 25 starting health, 6 starting energy, 5
- * starting hand cards (7 max), +2 energy and a card draw at the start of
+ * <p>The numeric rules (starting health, energy, hand size, and whether
+ * there's a turn clock at all) come in per-match via {@link MatchSettings}
+ * - see {@link MatchBuilder} - rather than being fixed here. What IS fixed
+ * for every mode: +1 card and this match's energy-per-turn at the start of
  * each turn, and units attacking whatever is opposite them (or the player,
- * if the opposite zone is empty) at the end of every turn except the very
+ * if the opposite zone is empty) at the end of every turn but the very
  * first.
  */
 public class Match {
@@ -23,6 +27,7 @@ public class Match {
     public static final int NUMBER_OF_ZONES = Player.NUMBER_OF_ZONES;
 
     private final int id;
+    private final MatchSettings settings;
     private final Player player1;
     private final Player player2;
 
@@ -30,15 +35,66 @@ public class Match {
     private int turnNumber = 1;
     private boolean active = true;
 
-    public Match(int id, PlayerConnection connection1, PlayerConnection connection2) {
+    /*
+     * Null whenever settings.hasTimer() is false. Otherwise, when
+     * currentTurn's clock last started ticking - see the turn-clock
+     * methods below.
+     */
+    private Long turnStartedAtMillis;
+
+    public Match(int id, PlayerConnection connection1, PlayerConnection connection2, MatchSettings settings) {
         this.id = id;
-        this.player1 = new Player(connection1);
-        this.player2 = new Player(connection2);
+        this.settings = settings;
+        this.player1 = new Player(connection1, settings);
+        this.player2 = new Player(connection2, settings);
 
         /*
          * Randomly select who goes first.
          */
         currentTurn = ThreadLocalRandom.current().nextBoolean() ? player1 : player2;
+        startTurnClock();
+    }
+
+    public synchronized boolean hasTimer() {
+        return settings.hasTimer();
+    }
+
+    /*
+     * ==========================================================
+     * Turn clock (Speed Match / a Chaos match that rolled a timer)
+     * ==========================================================
+     */
+
+    private void startTurnClock() {
+        if (settings.hasTimer()) {
+            turnStartedAtMillis = System.currentTimeMillis();
+        }
+    }
+
+    /*
+     * Charges `player` for however long their turn actually took, right
+     * before play passes away from them.
+     */
+    private void chargeElapsedTurnTime(Player player) {
+        if (!settings.hasTimer() || turnStartedAtMillis == null) {
+            return;
+        }
+        long elapsed = System.currentTimeMillis() - turnStartedAtMillis;
+        player.spendTime(elapsed);
+    }
+
+    /*
+     * How much time `player` has left right now - their saved total, minus
+     * however long their turn has been running so far if it's currently
+     * their turn. Used both for the "did someone just run out of time"
+     * check and for reporting a live-ticking clock to the client.
+     */
+    private long liveRemainingMillis(Player player) {
+        long remaining = player.getRemainingTimeMillis();
+        if (player == currentTurn && turnStartedAtMillis != null) {
+            remaining -= System.currentTimeMillis() - turnStartedAtMillis;
+        }
+        return remaining;
     }
 
     /*
@@ -106,7 +162,18 @@ public class Match {
             destroyUnit(targetUnit);
         }
 
-        player.sendToGraveyard(spell);
+        /*
+         * A BUFF spell doesn't get discarded on cast like every other
+         * spell - its effect (see Spell.apply above) wraps the target in
+         * a new UnitBuff decorator layer that stays attached to the unit.
+         * It only reaches the graveyard later, alongside the unit itself,
+         * when destroyUnit unwinds that stack of layers - see the note
+         * there for why that matters.
+         */
+        if (spell.getSpellType() != SpellType.BUFF) {
+            player.sendToGraveyard(spell);
+        }
+
         return true;
     }
 
@@ -158,6 +225,8 @@ public class Match {
             return false;
         }
 
+        chargeElapsedTurnTime(player);
+
         if (turnNumber > 1) {
             runAttackPhase(player);
         }
@@ -165,6 +234,7 @@ public class Match {
         currentTurn = getOpponent(player);
         turnNumber++;
         currentTurn.gainTurnResources();
+        startTurnClock();
 
         return true;
     }
@@ -196,9 +266,32 @@ public class Match {
     }
 
     /*
-     * Removes a unit from whichever front zone it occupies and sends it to
-     * its owner's graveyard. Used by combat, damage spells, and traps like
-     * Bear Trap that destroy a unit outright.
+     * Swaps a unit already on the field for a new (buffed) version of
+     * itself, in the same zone it already occupies. Used when a buff
+     * spell wraps a unit in a new UnitBuff layer - the field's reference
+     * to the unit changes, but its position doesn't, and nothing about
+     * playing a buff is trap-relevant the way playing a unit is.
+     */
+    public synchronized void replaceUnit(Unit oldUnit, Unit newUnit) {
+        replaceInZones(player1, oldUnit, newUnit);
+        replaceInZones(player2, oldUnit, newUnit);
+    }
+
+    private void replaceInZones(Player owner, Unit oldUnit, Unit newUnit) {
+        Unit[] zones = owner.getFrontZones();
+        for (int i = 0; i < zones.length; i++) {
+            if (zones[i] == oldUnit) {
+                zones[i] = newUnit;
+                return;
+            }
+        }
+    }
+
+    /*
+     * Removes a unit from whichever front zone it occupies and sends it,
+     * and every buff stacked on it, to its owner's graveyard. Used by
+     * combat, damage spells, and traps like Bear Trap that destroy a unit
+     * outright.
      */
     public synchronized void destroyUnit(Unit unit) {
         if (unit == null) {
@@ -213,10 +306,28 @@ public class Match {
         for (int i = 0; i < zones.length; i++) {
             if (zones[i] == unit) {
                 zones[i] = null;
-                owner.sendToGraveyard(unit);
+                sendToGraveyardLayered(owner, unit);
                 return;
             }
         }
+    }
+
+    /*
+     * Design pattern note - Decorator: a buffed unit is a stack of
+     * UnitBuff wrappers around a base unit card. Dying unwinds that stack
+     * from the outside in - the newest buff's own card goes to the
+     * graveyard first, then the one beneath it, and so on, with the
+     * original unit card always discarded last. A buff never reaches the
+     * graveyard any earlier than this, by design - see the note on
+     * playSpell for why.
+     */
+    private void sendToGraveyardLayered(Player owner, Unit unit) {
+        Unit current = unit;
+        while (current instanceof UnitBuff buff) {
+            owner.sendToGraveyard(buff);
+            current = buff.getWrapped();
+        }
+        owner.sendToGraveyard(current);
     }
 
     private Player ownerOf(Unit unit) {
@@ -243,7 +354,7 @@ public class Match {
     private void checkTraps(Player owner, GameEvent event) {
         Trap[] zones = owner.getBackZones();
 
-        for (int i = zones.length - 1; i >= 0; i--) {
+        for (int i = 0; i < zones.length; i++) {
             Trap trap = zones[i];
             if (trap != null && trap.isTriggeredBy(event, owner)) {
                 trap.activate(this, owner, event);
@@ -308,12 +419,21 @@ public class Match {
         return null;
     }
 
+    /*
+     * A player is defeated either by health (the existing rule for every
+     * mode) or, in a timed match, by their clock running out - including
+     * while it's still ticking down mid-turn, not just once they finally
+     * act, so a player who simply never moves still loses on schedule.
+     */
     public synchronized Player getDefeatedPlayer() {
         if (player1.isDefeated()) {
             return player1;
         }
         if (player2.isDefeated()) {
             return player2;
+        }
+        if (settings.hasTimer() && liveRemainingMillis(currentTurn) <= 0) {
+            return currentTurn;
         }
         return null;
     }
@@ -345,7 +465,13 @@ public class Match {
      * Field format, top level split by "|":
      *   STATE|matchId|turnPlayerNumber|viewerHealth|opponentHealth|
      *         viewerEnergy|viewerHand|opponentHandCount|
-     *         viewerFront|opponentFront|viewerBack|opponentBackZones
+     *         viewerFront|opponentFront|viewerBack|opponentBackZones|
+     *         viewerSecondsLeft|opponentSecondsLeft
+     *
+     * The last two are "-" whenever this match has no clock (hasTimer() is
+     * false); otherwise each is the live, currently-ticking remaining time
+     * for whichever of the two players it's still their turn, and their
+     * time as of the end of their last turn otherwise.
      *
      * Card entries within a list are ";"-separated, fields within an
      * entry are ","-separated (description is always last so a
@@ -377,7 +503,17 @@ public class Match {
                 + "|" + serializeFront(viewer.getFrontZones())
                 + "|" + serializeFront(opponent.getFrontZones())
                 + "|" + serializeOwnBack(viewer.getBackZones())
-                + "|" + serializeOccupiedZones(opponent.getBackZones());
+                + "|" + serializeOccupiedZones(opponent.getBackZones())
+                + "|" + serializeRemainingSeconds(viewer)
+                + "|" + serializeRemainingSeconds(opponent);
+    }
+
+    private String serializeRemainingSeconds(Player player) {
+        if (!settings.hasTimer()) {
+            return "-";
+        }
+        long seconds = Math.max(0, liveRemainingMillis(player) / 1000);
+        return String.valueOf(seconds);
     }
 
     private String serializeHand(Player viewer) {
@@ -422,8 +558,16 @@ public class Match {
             if (!result.isEmpty()) {
                 result.append(";");
             }
-            result.append(zone).append(",").append(unit.getId()).append(",").append(unit.getName())
-                    .append(",").append(unit.getEnergyCost())
+
+            /*
+             * Name and cost come from the original card underneath any
+             * buffs - a buffed Knight is still named and costed as a
+             * Knight. Health/maxHealth/damage come from the outermost
+             * layer, since those are exactly what a buff changes.
+             */
+            Unit base = unit.getBaseUnit();
+            result.append(zone).append(",").append(unit.getId()).append(",").append(base.getName())
+                    .append(",").append(base.getEnergyCost())
                     .append(",").append(unit.getHealth()).append(",").append(unit.getMaxHealth())
                     .append(",").append(unit.getDamage()).append(",").append(unit.getElement())
                     .append(",").append(unit.hasClan() ? unit.getClan() : "NONE");

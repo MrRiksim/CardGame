@@ -16,7 +16,9 @@ public final class CardArt {
     private static final Map<String, String> FILE_NAME_OVERRIDES = Map.of(
             "Knight", "knight.png",
             "Lightning Strike", "lightning_strike.png",
-            "Bear Trap", "bear_trap.png"
+            "Bear Trap", "bear_trap.png",
+            "Armor", "armor.png",
+            "Damage Potion", "damage_potion.png"
     );
 
     private CardArt() {

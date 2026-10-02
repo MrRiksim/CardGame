@@ -13,20 +13,28 @@ import java.util.List;
  * board zones and graveyard. This is separate from {@link PlayerConnection},
  * which only knows how to talk to the socket - Player is the domain object,
  * PlayerConnection is purely the network transport.
+ *
+ * <p>The starting numbers (health, energy, hand size...) used to be fixed
+ * constants here. Now that a match can be Standard, Speed or Chaos (see
+ * {@link MatchBuilder}), they come in per-match as a {@link MatchSettings},
+ * assembled once by whichever builder the match was created with.
  */
 public class Player {
 
-    public static final int STARTING_HEALTH = 25;
-    public static final int STARTING_ENERGY = 6;
-    public static final int STARTING_HAND_SIZE = 5;
-    public static final int MAX_HAND_SIZE = 7;
-    public static final int ENERGY_PER_TURN = 2;
     public static final int NUMBER_OF_ZONES = 5;
 
     private final PlayerConnection connection;
+    private final MatchSettings settings;
 
-    private int health = STARTING_HEALTH;
-    private int energy = STARTING_ENERGY;
+    private int health;
+    private int energy;
+
+    /*
+     * Only meaningful when settings.hasTimer() - how much of this
+     * player's clock was left as of the start of their current turn. See
+     * Match's turn-clock methods for how this gets charged and read.
+     */
+    private long remainingTimeMillis;
 
     private final List<Card> hand = new ArrayList<>();
     private final List<Card> graveyard = new ArrayList<>();
@@ -38,10 +46,14 @@ public class Player {
     private final Unit[] frontZones = new Unit[NUMBER_OF_ZONES];
     private final Trap[] backZones = new Trap[NUMBER_OF_ZONES];
 
-    public Player(PlayerConnection connection) {
+    public Player(PlayerConnection connection, MatchSettings settings) {
         this.connection = connection;
+        this.settings = settings;
+        this.health = settings.startingHealth();
+        this.energy = settings.startingEnergy();
+        this.remainingTimeMillis = settings.hasTimer() ? settings.timePerPlayerMillis() : 0;
 
-        for (int i = 0; i < STARTING_HAND_SIZE; i++) {
+        for (int i = 0; i < settings.startingHandSize(); i++) {
             hand.add(CardFactory.createRandomCard());
         }
     }
@@ -83,17 +95,30 @@ public class Player {
     }
 
     /*
-     * Called at the start of this player's turn: +2 energy and a card draw.
+     * Called at the start of this player's turn: gains this match's
+     * energy-per-turn and a card draw.
      */
     public void gainTurnResources() {
-        energy += ENERGY_PER_TURN;
+        energy += settings.energyPerTurn();
         drawCard();
     }
 
     public void drawCard() {
-        if (hand.size() < MAX_HAND_SIZE) {
+        if (hand.size() < settings.maxHandSize()) {
             hand.add(CardFactory.createRandomCard());
         }
+    }
+
+    public long getRemainingTimeMillis() {
+        return remainingTimeMillis;
+    }
+
+    public void spendTime(long millis) {
+        remainingTimeMillis = Math.max(0, remainingTimeMillis - millis);
+    }
+
+    public boolean isOutOfTime() {
+        return settings.hasTimer() && remainingTimeMillis <= 0;
     }
 
     public List<Card> getHand() {

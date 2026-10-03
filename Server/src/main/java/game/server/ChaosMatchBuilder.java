@@ -4,10 +4,20 @@ import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * Concrete Builder - every step rolls its own random value, within the
- * ranges below. Reuses {@link StandardMatchBuilder}'s fields and
- * {@code build()}; only HOW each step is filled in differs.
+ * ranges below.
  */
-public class ChaosMatchBuilder extends StandardMatchBuilder {
+public class ChaosMatchBuilder implements MatchBuilder {
+
+    private int health;
+    private int energy;
+    private int energyPerTurn;
+    private int startingHandSize;
+    private int maxHandSize;
+    private Long timePerPlayerMillis;
+
+    private int randomBetween(int minInclusive, int maxInclusive) {
+        return ThreadLocalRandom.current().nextInt(minInclusive, maxInclusive + 1);
+    }
 
     @Override
     public MatchBuilder setHealth() {
@@ -41,7 +51,8 @@ public class ChaosMatchBuilder extends StandardMatchBuilder {
         return this;
     }
 
-    private int randomBetween(int minInclusive, int maxInclusive) {
-        return ThreadLocalRandom.current().nextInt(minInclusive, maxInclusive + 1);
+    @Override
+    public MatchSettings build() {
+        return new MatchSettings(health, energy, energyPerTurn, startingHandSize, maxHandSize, timePerPlayerMillis);
     }
 }

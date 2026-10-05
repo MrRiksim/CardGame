@@ -39,9 +39,9 @@ public class CardFactory {
             ArmorSpell::create,
             DamagePotionSpell::create,
             () -> new SkeletonCardAdapter(
-                    new SkeletonCard(5,5, 1, 2, 2, 3)
-            ),
+                    new SkeletonCard(5,5, 1, 2, 2, 3),
             Archer::create
+
 
     );
 

@@ -6,6 +6,8 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
 import java.util.function.Consumer;
 
 public class BoardPanel extends JPanel {
@@ -74,6 +76,7 @@ public class BoardPanel extends JPanel {
     private int opponentHandCount = 0;
     private boolean yourTurn = false;
     private boolean gameOver = false;
+    private Map<Integer, Integer> archerTargets = new HashMap<>();
 
     /*
      * Only ever a card currently in hand - played cards can't be re-dragged.
@@ -84,6 +87,8 @@ public class BoardPanel extends JPanel {
 
     private final Consumer<PlayAction> playListener;
 
+
+
     public BoardPanel(Consumer<PlayAction> playListener) {
         this.playListener = playListener;
 
@@ -91,11 +96,19 @@ public class BoardPanel extends JPanel {
         setBackground(new Color(235, 235, 235));
         setBorder(BorderFactory.createLineBorder(Color.BLACK, 2));
 
+
+
         MouseAdapter mouseAdapter = new MouseAdapter() {
 
             @Override
             public void mousePressed(MouseEvent e) {
                 Point board = toBoardPoint(e.getX(), e.getY());
+
+
+                if (handleArcherClick(board.x, board.y)) {
+                    return;
+                }
+
                 startDragging(board.x, board.y);
             }
 
@@ -119,6 +132,55 @@ public class BoardPanel extends JPanel {
 
         addMouseListener(mouseAdapter);
         addMouseMotionListener(mouseAdapter);
+    }
+
+    private boolean handleArcherClick(int x, int y) {
+        if (!yourTurn || gameOver) {
+            return false;
+        }
+
+        for (ClientUnit unit : ownFront) {
+            Rectangle zone =
+                    getOwnZoneRectangle(unit.zoneIndex(), PLAYER_FRONT_Y);
+
+            if (!unit.name().equals("Archer")
+                    || !getFieldCardRectangle(zone).contains(x, y)) {
+                continue;
+            }
+
+            String[] slots = {"1", "2", "3", "4", "5"};
+            JComboBox<String> targetSelector = new JComboBox<>(slots);
+            targetSelector.setSelectedIndex(archerTargets.getOrDefault(unit.zoneIndex(), -1));
+            Object[] message = {
+                    "Choose an enemy front slot (left to right):",
+                    targetSelector,
+                    "Undo reverses your latest archer target selection."
+            };
+            String[] actions = {"Select Target", "Undo Last Selection", "Cancel"};
+
+            int action = JOptionPane.showOptionDialog(
+                    this,
+                    message,
+                    "Archer target",
+                    JOptionPane.DEFAULT_OPTION,
+                    JOptionPane.QUESTION_MESSAGE,
+                    null,
+                    actions,
+                    actions[0]
+            );
+
+            if (action == 0 && targetSelector.getSelectedIndex() >= 0) {
+                playListener.accept(new PlayAction.ArcherTarget(
+                        unit.id(), targetSelector.getSelectedIndex()
+                ));
+            } else if (action == 1) {
+                playListener.accept(new PlayAction.UndoArcherTarget());
+            }
+
+            return true;
+        }
+
+        return false;
     }
 
     /*
@@ -160,7 +222,8 @@ public class BoardPanel extends JPanel {
             List<ClientUnit> opponentFront,
             List<ClientTrap> ownBack,
             List<Integer> opponentBackZones,
-            boolean yourTurn) {
+            boolean yourTurn,
+            Map<Integer, Integer> archerTargets) {
 
         this.ownHand = new ArrayList<>(ownHand);
         this.opponentHandCount = opponentHandCount;
@@ -169,6 +232,7 @@ public class BoardPanel extends JPanel {
         this.ownBack = new ArrayList<>(ownBack);
         this.opponentBackZones = new ArrayList<>(opponentBackZones);
         this.yourTurn = yourTurn;
+        this.archerTargets = new HashMap<>(archerTargets);
 
         /*
          * Deliberately NOT clearing draggedCard here. A timed match's
@@ -187,6 +251,7 @@ public class BoardPanel extends JPanel {
     }
 
     public void resetGame() {
+        archerTargets.clear();
         ownHand = new ArrayList<>();
         ownFront = new ArrayList<>();
         opponentFront = new ArrayList<>();
@@ -200,6 +265,7 @@ public class BoardPanel extends JPanel {
     }
 
     public void setGameOver() {
+        archerTargets.clear();
         gameOver = true;
         yourTurn = false;
         draggedCard = null;
@@ -371,6 +437,7 @@ public class BoardPanel extends JPanel {
         drawOwnHand(graphics);
         drawFrontZones(graphics);
         drawBackZones(graphics);
+        drawArcherTargets(graphics);
 
         if (draggedCard != null) {
             Rectangle rectangle = new Rectangle(
@@ -380,6 +447,35 @@ public class BoardPanel extends JPanel {
         }
 
         graphics.dispose();
+    }
+
+    private void drawArcherTargets(Graphics2D graphics) {
+        Graphics2D arrows = (Graphics2D) graphics.create();
+        arrows.setColor(new Color(210, 35, 35));
+        arrows.setStroke(new BasicStroke(3f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        for (ClientUnit unit : ownFront) {
+            Integer targetSlot = archerTargets.get(unit.zoneIndex());
+            if (!unit.name().equals("Archer") || targetSlot == null) {
+                continue;
+            }
+            Rectangle source = getOwnZoneRectangle(unit.zoneIndex(), PLAYER_FRONT_Y);
+            Rectangle target = getOpponentZoneRectangle(targetSlot, OPPONENT_FRONT_Y);
+            int startX = source.x + source.width / 2;
+            int startY = source.y + 5;
+            int endX = target.x + target.width / 2;
+            int endY = target.y + target.height - 5;
+            arrows.drawLine(startX, startY, endX, endY);
+            double angle = Math.atan2(endY - startY, endX - startX);
+            int headLength = 14;
+            Polygon head = new Polygon();
+            head.addPoint(endX, endY);
+            head.addPoint((int) Math.round(endX - headLength * Math.cos(angle - Math.PI / 6)),
+                    (int) Math.round(endY - headLength * Math.sin(angle - Math.PI / 6)));
+            head.addPoint((int) Math.round(endX - headLength * Math.cos(angle + Math.PI / 6)),
+                    (int) Math.round(endY - headLength * Math.sin(angle + Math.PI / 6)));
+            arrows.fillPolygon(head);
+        }
+        arrows.dispose();
     }
 
     private void drawBoard(Graphics2D graphics) {

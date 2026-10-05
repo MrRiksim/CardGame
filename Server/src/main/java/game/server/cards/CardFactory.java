@@ -4,6 +4,7 @@ import game.server.cards.spells.ArmorSpell;
 import game.server.cards.spells.DamagePotionSpell;
 import game.server.cards.spells.LightningStrike;
 import game.server.cards.traps.BearTrap;
+import game.server.cards.units.Archer;
 import game.server.cards.units.Knight;
 
 import java.util.List;
@@ -36,7 +37,12 @@ public class CardFactory {
             LightningStrike::create,
             BearTrap::create,
             ArmorSpell::create,
-            DamagePotionSpell::create
+            DamagePotionSpell::create,
+            () -> new SkeletonCardAdapter(
+                    new SkeletonCard(5,5, 1, 2, 2, 3)
+            ),
+            Archer::create
+
     );
 
     private CardFactory() {

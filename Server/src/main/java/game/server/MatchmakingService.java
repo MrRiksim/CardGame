@@ -4,6 +4,7 @@ import game.server.cards.Unit;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
@@ -12,6 +13,9 @@ import java.util.Queue;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+
+import game.server.commands.GameCommand;
+import game.server.commands.ChooseArcherTargetCommand;
 
 /**
  * Protocol v3 message formats handled here:
@@ -38,6 +42,7 @@ public class MatchmakingService {
     private final Map<GameMode, Queue<PlayerConnection>> waitingPlayers = new EnumMap<>(GameMode.class);
     private final Map<Integer, Match> activeMatches = new HashMap<>();
     private final Map<PlayerConnection, Match> playerMatches = new HashMap<>();
+    private final Map<Player, Deque<GameCommand>> archerCommandHistory = new HashMap<>();
     private final MatchSettingsDirector settingsDirector = new MatchSettingsDirector();
 
     private int nextMatchId = 1;
@@ -117,6 +122,53 @@ public class MatchmakingService {
             return;
         }
 
+        if (message.startsWith("ARCHER_TARGET|")) {
+            String[] parts = message.split("\\|");
+
+            if (parts.length != 3) {
+                return;
+            }
+
+            try {
+                int targetSlot = Integer.parseInt(parts[2]);
+
+                GameCommand command = new ChooseArcherTargetCommand(
+                        match, player, parts[1], targetSlot
+                );
+
+                boolean accepted = command.execute();
+                if (accepted) {
+                    archerCommandHistory.computeIfAbsent(player, key -> new ArrayDeque<>())
+                            .push(command);
+                }
+                System.out.println("Archer target slot " + (targetSlot + 1)
+                        + (accepted ? " accepted." : " rejected."));
+                connection.send(
+                        accepted ? "ARCHER_TARGET_OK" : "ARCHER_TARGET_REJECTED"
+                );
+                if (accepted) {
+                    broadcastState(match);
+                }
+            } catch (NumberFormatException e) {
+                connection.send("ARCHER_TARGET_REJECTED");
+            }
+
+            return;
+        }
+
+        if (message.equals("UNDO_ARCHER_TARGET")) {
+            Deque<GameCommand> history = archerCommandHistory.get(player);
+            boolean undone = history != null && !history.isEmpty() && history.peek().undo();
+            if (undone) {
+                history.pop();
+            }
+            connection.send(undone ? "ARCHER_UNDO_OK" : "ARCHER_UNDO_REJECTED");
+            if (undone) {
+                broadcastState(match);
+            }
+            return;
+        }
+
         if (message.startsWith("PLAY_UNIT|")) {
             handlePlayUnit(player, match, message);
             return;
@@ -130,7 +182,9 @@ public class MatchmakingService {
             return;
         }
         if (message.equals("END_TURN")) {
-            match.endTurn(player);
+            if (match.endTurn(player)) {
+                archerCommandHistory.remove(player);
+            }
             broadcastState(match);
             checkForGameOver(match);
             return;
@@ -235,6 +289,8 @@ public class MatchmakingService {
         defeated.send("YOU_LOSE");
 
         match.endMatch();
+        archerCommandHistory.remove(match.getPlayer1());
+        archerCommandHistory.remove(match.getPlayer2());
         activeMatches.remove(match.getId());
         playerMatches.remove(winner.getConnection());
         playerMatches.remove(defeated.getConnection());
@@ -273,6 +329,8 @@ public class MatchmakingService {
         Player opponent = match.getOpponent(player);
 
         match.endMatch();
+        archerCommandHistory.remove(match.getPlayer1());
+        archerCommandHistory.remove(match.getPlayer2());
         playerMatches.remove(opponent.getConnection());
         activeMatches.remove(match.getId());
 

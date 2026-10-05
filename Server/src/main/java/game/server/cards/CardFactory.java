@@ -36,7 +36,11 @@ public class CardFactory {
             LightningStrike::create,
             BearTrap::create,
             ArmorSpell::create,
-            DamagePotionSpell::create
+            DamagePotionSpell::create,
+            () -> new SkeletonCardAdapter(
+                    new SkeletonCard(5,5, 1, 2, 2, 3)
+            )
+
     );
 
     private CardFactory() {

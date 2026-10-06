@@ -4,6 +4,8 @@ import game.server.cards.Card;
 import game.server.cards.CardFactory;
 import game.server.cards.Trap;
 import game.server.cards.Unit;
+import game.server.cards.Spell;
+import game.server.cards.spells.ShiftingSpellCard;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -53,6 +55,7 @@ public class Player {
         this.energy = settings.startingEnergy();
         this.remainingTimeMillis = settings.hasTimer() ? settings.timePerPlayerMillis() : 0;
 
+        hand.add(ShiftingSpellCard.create());
         for (int i = 0; i < settings.startingHandSize(); i++) {
             hand.add(CardFactory.createRandomCard());
         }

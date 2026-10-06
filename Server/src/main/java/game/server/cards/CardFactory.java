@@ -6,6 +6,7 @@ import game.server.cards.spells.LightningStrike;
 import game.server.cards.traps.BearTrap;
 import game.server.cards.units.Archer;
 import game.server.cards.units.Knight;
+import game.server.cards.spells.ShiftingSpellCard;
 
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
@@ -39,10 +40,10 @@ public class CardFactory {
             ArmorSpell::create,
             DamagePotionSpell::create,
             () -> new SkeletonCardAdapter(
-                    new SkeletonCard(5,5, 1, 2, 2, 3),
-            Archer::create
-
-
+                    new SkeletonCard(5,5, 1, 2, 2, 3)
+            ),
+            Archer::create,
+            ShiftingSpellCard::create
     );
 
     private CardFactory() {

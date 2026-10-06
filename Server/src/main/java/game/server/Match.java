@@ -363,7 +363,7 @@ public class Match {
         owner.sendToGraveyard(current);
     }
 
-    private Player ownerOf(Unit unit) {
+    public Player ownerOf(Unit unit) {
         for (Unit candidate : player1.getFrontZones()) {
             if (candidate == unit) {
                 return player1;

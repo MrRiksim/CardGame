@@ -88,14 +88,12 @@ public class BoardPanel extends JPanel {
     private final Consumer<PlayAction> playListener;
 
 
-
     public BoardPanel(Consumer<PlayAction> playListener) {
         this.playListener = playListener;
 
         setPreferredSize(new Dimension(BASE_WIDTH, BASE_HEIGHT));
         setBackground(new Color(235, 235, 235));
         setBorder(BorderFactory.createLineBorder(Color.BLACK, 2));
-
 
 
         MouseAdapter mouseAdapter = new MouseAdapter() {
@@ -332,6 +330,10 @@ public class BoardPanel extends JPanel {
             if (draggedCard instanceof ClientUnit unit) {
                 return new PlayAction.UnitPlacement(unit.id(), emptyFrontZone);
             }
+            // SPECIAL spells can be played on empty front field zones!
+            if (draggedCard instanceof ClientSpell spell && spell.spellType() == SpellType.SPECIAL) {
+                return new PlayAction.SpellCast(spell.id(), null);
+            }
             return null;
         }
 
@@ -340,15 +342,24 @@ public class BoardPanel extends JPanel {
             if (draggedCard instanceof ClientTrap trap) {
                 return new PlayAction.TrapPlacement(trap.id(), emptyBackZone);
             }
+            // SPECIAL spells can be played on empty back field zones!
+            if (draggedCard instanceof ClientSpell spell && spell.spellType() == SpellType.SPECIAL) {
+                return new PlayAction.SpellCast(spell.id(), null);
+            }
             return null;
         }
 
-        if (draggedCard instanceof ClientSpell spell
-                && spell.spellType() == SpellType.SPECIAL
-                && new Rectangle(0, 0, BASE_WIDTH, BASE_HEIGHT).contains(x, y)) {
-            return new PlayAction.SpellCast(spell.id(), null);
+        // SPECIAL spells targeting utility zones (e.g., Graveyard or Deck)
+        if (draggedCard instanceof ClientSpell spell && spell.spellType() == SpellType.SPECIAL) {
+            if (getPlayerUtilityRectangle(PLAYER_FRONT_Y).contains(x, y) || // Player Graveyard
+                    getPlayerUtilityRectangle(PLAYER_BACK_Y).contains(x, y) || // Player Deck
+                    getOpponentUtilityRectangle(OPPONENT_FRONT_Y).contains(x, y) || // Opponent Graveyard
+                    getOpponentUtilityRectangle(OPPONENT_BACK_Y).contains(x, y)) {   // Opponent Deck
+                return new PlayAction.SpellCast(spell.id(), null);
+            }
         }
 
+        // Dropping outside any valid game zone returns null -> card snaps back to hand!
         return null;
     }
 

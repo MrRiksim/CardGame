@@ -18,7 +18,8 @@ public final class CardArt {
             "Lightning Strike", "lightning_strike.png",
             "Bear Trap", "bear_trap.png",
             "Armor", "armor.png",
-            "Damage Potion", "damage_potion.png"
+            "Damage Potion", "damage_potion.png",
+            "Shifting Spell","shifting_spell.png"
     );
 
     private CardArt() {

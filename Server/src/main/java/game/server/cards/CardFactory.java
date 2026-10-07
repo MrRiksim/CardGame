@@ -7,6 +7,8 @@ import game.server.cards.traps.BearTrap;
 import game.server.cards.units.Archer;
 import game.server.cards.units.Knight;
 import game.server.cards.spells.ShiftingSpellCard;
+import game.server.cards.units.Skelly;
+import game.server.cards.units.Tombstone;
 
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
@@ -43,7 +45,9 @@ public class CardFactory {
                     new SkeletonCard(5,5, 1, 2, 2, 3)
             ),
             Archer::create,
-            ShiftingSpellCard::create
+            ShiftingSpellCard::create,
+            Skelly::create,
+            Tombstone::create
     );
 
     private CardFactory() {

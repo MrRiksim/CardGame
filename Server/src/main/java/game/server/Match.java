@@ -244,6 +244,7 @@ public class Match {
         currentTurn = getOpponent(player);
         turnNumber++;
         currentTurn.gainTurnResources();
+        runSpawnPhase(currentTurn);
         startTurnClock();
 
         archerTargets.clear();
@@ -723,5 +724,54 @@ public class Match {
         }
 
         return null;
+    }
+
+    /*
+     * The lowest-index empty front zone for `owner`, or -1 if the row is
+     * full. Written as its own method because it needs to be re-queried
+     * fresh for every individual creator's spawn attempt - including when
+     * an earlier creator in the same turn just filled the only open zone.
+     */
+    public synchronized int findEmptyFrontZone(Player owner) {
+        Unit[] zones = owner.getFrontZones();
+        for (int i = zones.length - 1; i >= 0; i--) {
+            if (zones[i] == null) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    /*
+     * Places a unit directly into a zone with no energy cost and no hand
+     * involved - used by UnitCreator.spawn for passive-effect cards like
+     * Tombstone. Fires the same trap check as playUnit, so a unit appearing
+     * on the field is trap-relevant regardless of how it got there. (Worth
+     * a second look: BearTrap's condition was written for the enemy playing
+     * a unit CARD - whether a spawned unit should count is a judgment call,
+     * not something the earlier conversation settled either way.)
+     */
+    public synchronized void placeUnitForFree(Player owner, int zoneIndex, Unit unit) {
+        if (zoneIndex < 0 || zoneIndex >= NUMBER_OF_ZONES || owner.getFrontZones()[zoneIndex] != null) {
+            return;
+        }
+        owner.getFrontZones()[zoneIndex] = unit;
+        checkTraps(getOpponent(owner), new GameEvent(GameEvent.Type.UNIT_PLAYED, owner, unit));
+    }
+
+    /*
+     * Lets every unit belonging to `owner` act on its onOwnerTurnStart hook,
+     * in left-to-right zone order - a fixed snapshot, so a unit a creator
+     * spawns mid-phase doesn't also get a turn in the same phase it was
+     * just created, and so two creators fairly race for the same empty
+     * zone rather than racing against a mutating array.
+     */
+    private void runSpawnPhase(Player owner) {
+        Unit[] snapshot = owner.getFrontZones().clone();
+        for (Unit unit : snapshot) {
+            if (unit != null) {
+                unit.onOwnerTurnStart(this, owner);
+            }
+        }
     }
 }

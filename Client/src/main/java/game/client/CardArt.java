@@ -19,7 +19,9 @@ public final class CardArt {
             "Bear Trap", "bear_trap.png",
             "Armor", "armor.png",
             "Damage Potion", "damage_potion.png",
-            "Shifting Spell","shifting_spell.png"
+            "Shifting Spell","shifting_spell.png",
+            "Skelly", "skelly.png",
+            "Tombstone","tombstone.png"
     );
 
     private CardArt() {

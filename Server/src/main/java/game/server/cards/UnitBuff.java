@@ -1,4 +1,6 @@
 package game.server.cards;
+import game.server.Match;
+import game.server.Player;
 
 /**
  * <b>Design pattern - Decorator.</b> Component = {@link Unit}, ConcreteComponent =
@@ -58,5 +60,10 @@ public abstract class UnitBuff extends Unit {
     @Override
     public Unit getBaseUnit() {
         return wrapped.getBaseUnit();
+    }
+
+    @Override
+    public void onOwnerTurnStart(Match match, Player owner) {
+        getWrapped().onOwnerTurnStart(match, owner);
     }
 }

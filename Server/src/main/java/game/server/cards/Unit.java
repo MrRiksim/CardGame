@@ -1,4 +1,6 @@
 package game.server.cards;
+import game.server.Match;
+import game.server.Player;
 
 /**
  * A card that gets placed in one of the 5 front field zones. Units deal
@@ -100,4 +102,11 @@ public abstract class Unit extends Card {
     public Unit getBaseUnit() {
         return this;
     }
+
+    /*
+     * Hook for a unit with passive, start-of-turn behavior (see Tombstone).
+     * Called once for every unit belonging to whoever's turn just started;
+     * most units have nothing to do here, hence the no-op default.
+     */
+    public void onOwnerTurnStart(Match match, Player owner) {}
 }

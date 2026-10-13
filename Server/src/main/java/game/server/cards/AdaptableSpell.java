@@ -33,6 +33,14 @@ public class AdaptableSpell extends Spell {
                     ? SpellTargetContext.TargetZone.ENEMY_UNIT
                     : SpellTargetContext.TargetZone.ALLY_UNIT;
             applyAdaptable(match, caster, new SpellTargetContext(zone, target));
+        } else {
+            // Fallback when played without a unit target (e.g. dropped on Deck/Graveyard)
+            // If caster has cards in graveyard, resurrect; otherwise draw from deck
+            SpellTargetContext.TargetZone zone = caster.getGraveyard().isEmpty()
+                    ? SpellTargetContext.TargetZone.DECK
+                    : SpellTargetContext.TargetZone.GRAVEYARD;
+
+            applyAdaptable(match, caster, new SpellTargetContext(zone, null));
         }
     }
 }

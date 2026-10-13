@@ -112,6 +112,10 @@ public class Player {
         }
     }
 
+    public void drawTwoCardsFromDeck() {
+            hand.add(CardFactory.createRandomCard());
+    }
+
     public long getRemainingTimeMillis() {
         return remainingTimeMillis;
     }

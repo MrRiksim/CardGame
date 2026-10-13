@@ -1,21 +1,51 @@
 package game.server;
 
+import java.util.concurrent.ThreadLocalRandom;
+
 /**
- * <b>Design pattern - Builder (Director).</b> Knows the one fixed sequence
- * every match's settings get assembled in; knows nothing about how any
- * individual step is filled in - that's entirely up to whichever concrete
- * {@link MatchBuilder} it's handed. Adding a fourth game mode never
- * touches this class, only {@link MatchmakingService}'s mode-to-builder
- * mapping.
+ * Builder pattern - Director. One method per product, each owning the real
+ * numbers for its mode and the order of the build steps; the builders only
+ * apply what they're handed.
+ *
+ * Chaos has no builder of its own: it produces the same product TYPE as a
+ * Speed match (a SpeedMatch), just filled with random numbers. Builders
+ * exist per product type, not per game mode.
  */
 public class MatchSettingsDirector {
 
-    public MatchSettings direct(MatchBuilder builder) {
-        return builder
-                .setHealth()
-                .setEnergy()
-                .setHandSizes()
-                .setTimer()
-                .build();
+    private static final int SPEED_MATCH_MINUTES = 10;
+
+    public StandardMatch buildStandardMatch() {
+        return new StandardMatchBuilder()
+                .setHealth(25)
+                .setEnergy(6, 2)
+                .setHandSizes(5, 7)
+                .getProduct();
+    }
+
+    public SpeedMatch buildSpeedMatch() {
+        return new SpeedMatchBuilder()
+                .setHealth(25)
+                .setEnergy(6, 2)
+                .setHandSizes(5, 7)
+                .setTimer(minutesToMillis(SPEED_MATCH_MINUTES))
+                .getProduct();
+    }
+
+    public SpeedMatch buildChaosMatch() {
+        return new SpeedMatchBuilder()
+                .setHealth(randomBetween(10, 40))
+                .setEnergy(randomBetween(0, 10), randomBetween(1, 4))
+                .setHandSizes(randomBetween(2, 6), randomBetween(6, 10))
+                .setTimer(minutesToMillis(randomBetween(5, 15)))
+                .getProduct();
+    }
+
+    private int randomBetween(int minInclusive, int maxInclusive) {
+        return ThreadLocalRandom.current().nextInt(minInclusive, maxInclusive + 1);
+    }
+
+    private long minutesToMillis(int minutes) {
+        return minutes * 60L * 1000L;
     }
 }

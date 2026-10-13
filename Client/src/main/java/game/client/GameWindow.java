@@ -80,7 +80,7 @@ public class GameWindow {
                 GameMode.SPEED));
         panel.add(createModeButton(
                 "Chaos Match",
-                "Health, energy, hand size - everything is randomized. Might even be timed.",
+                "Health, energy, hand size - and a 5 to 15 minute clock - are all randomized.",
                 GameMode.CHAOS));
 
         return panel;

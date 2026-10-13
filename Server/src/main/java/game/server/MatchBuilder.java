@@ -1,27 +1,26 @@
 package game.server;
 
 /**
- * <b>Design pattern - Builder.</b> Builder = this interface, Product =
- * {@link MatchSettings}, ConcreteBuilders = {@link StandardMatchBuilder},
- * {@link SpeedMatchBuilder} and {@link ChaosMatchBuilder}, Director =
- * {@link MatchSettingsDirector}.
+ * Builder pattern - Builder. Each step now receives the actual numbers
+ * instead of deciding them itself; a concrete builder just applies them to
+ * the product it's holding. build() became getProduct().
  *
- * <p>Each step here just decides ONE piece of the settings - how it's
- * decided (a fixed number, a mode-specific number, or a random roll) is
- * entirely up to the concrete builder. The ORDER the steps get called in
- * is fixed and lives in the Director, not in any builder - swapping
- * Standard/Speed/Chaos never has to touch that sequence, which is what
- * separates this from simply being three overloads of a factory method.
+ * setTimer is an optional step with an empty default, which is how the
+ * original pattern description suggests handling steps only some builders
+ * care about: StandardMatchBuilder's product has no clock, so it simply
+ * inherits the no-op, while SpeedMatchBuilder overrides it.
  */
 public interface MatchBuilder {
 
-    MatchBuilder setHealth();
+    MatchBuilder setHealth(int health);
 
-    MatchBuilder setEnergy();
+    MatchBuilder setEnergy(int startingEnergy, int energyPerTurn);
 
-    MatchBuilder setHandSizes();
+    MatchBuilder setHandSizes(int startingHandSize, int maxHandSize);
 
-    MatchBuilder setTimer();
+    default MatchBuilder setTimer(long timePerPlayerMillis) {
+        return this;
+    }
 
-    MatchSettings build();
+    MatchSettings getProduct();
 }

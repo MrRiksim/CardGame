@@ -1,46 +1,38 @@
 package game.server;
 
 /**
- * Concrete Builder - the existing, fixed ruleset, unchanged from before
- * game modes existed.
+ * Concrete Builder for a match with no clock. Holds one StandardMatch and
+ * builds it up step by step. Single-use: the Director creates a fresh
+ * builder for every match. The overrides use covariant return types so the
+ * Director's call chain keeps its specific types all the way to
+ * getProduct().
  */
 public class StandardMatchBuilder implements MatchBuilder {
 
-    private int health;
-    private int energy;
-    private int energyPerTurn;
-    private int startingHandSize;
-    private int maxHandSize;
-    private Long timePerPlayerMillis;
+    private final StandardMatch product = new StandardMatch();
 
     @Override
-    public MatchBuilder setHealth() {
-        health = 25;
+    public StandardMatchBuilder setHealth(int health) {
+        product.setStartingHealth(health);
         return this;
     }
 
     @Override
-    public MatchBuilder setEnergy() {
-        energy = 6;
-        energyPerTurn = 2;
+    public StandardMatchBuilder setEnergy(int startingEnergy, int energyPerTurn) {
+        product.setStartingEnergy(startingEnergy);
+        product.setEnergyPerTurn(energyPerTurn);
         return this;
     }
 
     @Override
-    public MatchBuilder setHandSizes() {
-        startingHandSize = 5;
-        maxHandSize = 7;
+    public StandardMatchBuilder setHandSizes(int startingHandSize, int maxHandSize) {
+        product.setStartingHandSize(startingHandSize);
+        product.setMaxHandSize(maxHandSize);
         return this;
     }
 
     @Override
-    public MatchBuilder setTimer() {
-        timePerPlayerMillis = null;
-        return this;
-    }
-
-    @Override
-    public MatchSettings build() {
-        return new MatchSettings(health, energy, energyPerTurn, startingHandSize, maxHandSize, timePerPlayerMillis);
+    public StandardMatch getProduct() {
+        return product;
     }
 }

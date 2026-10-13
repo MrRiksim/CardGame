@@ -69,7 +69,7 @@ public class Match {
 
     /*
      * ==========================================================
-     * Turn clock (Speed Match / a Chaos match that rolled a timer)
+     * Turn clock (Speed and Chaos Matches)
      * ==========================================================
      */
 

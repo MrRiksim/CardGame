@@ -76,7 +76,7 @@ public class MatchmakingService {
             }
 
             int matchId = nextMatchId++;
-            MatchSettings settings = settingsDirector.direct(createBuilder(mode));
+            MatchSettings settings = createSettings(mode);
             Match match = new Match(matchId, opponent, connection, settings);
 
             activeMatches.put(matchId, match);
@@ -98,11 +98,11 @@ public class MatchmakingService {
         System.out.println("Player is waiting for a " + mode + " opponent.");
     }
 
-    private MatchBuilder createBuilder(GameMode mode) {
+    private MatchSettings createSettings(GameMode mode) {
         return switch (mode) {
-            case STANDARD -> new StandardMatchBuilder();
-            case SPEED -> new SpeedMatchBuilder();
-            case CHAOS -> new ChaosMatchBuilder();
+            case STANDARD -> settingsDirector.buildStandardMatch();
+            case SPEED -> settingsDirector.buildSpeedMatch();
+            case CHAOS -> settingsDirector.buildChaosMatch();
         };
     }
 

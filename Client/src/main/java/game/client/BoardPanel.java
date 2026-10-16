@@ -72,6 +72,8 @@ public class BoardPanel extends JPanel {
     private List<ClientUnit> opponentFront = new ArrayList<>();
     private List<ClientTrap> ownBack = new ArrayList<>();
     private List<Integer> opponentBackZones = new ArrayList<>();
+    private ClientCard ownGraveyardTop;
+    private ClientCard opponentGraveyardTop;
 
     private int opponentHandCount = 0;
     private boolean yourTurn = false;
@@ -220,6 +222,8 @@ public class BoardPanel extends JPanel {
             List<ClientUnit> opponentFront,
             List<ClientTrap> ownBack,
             List<Integer> opponentBackZones,
+            ClientCard ownGraveyardTop,
+            ClientCard opponentGraveyardTop,
             boolean yourTurn,
             Map<Integer, Integer> archerTargets) {
 
@@ -229,6 +233,8 @@ public class BoardPanel extends JPanel {
         this.opponentFront = new ArrayList<>(opponentFront);
         this.ownBack = new ArrayList<>(ownBack);
         this.opponentBackZones = new ArrayList<>(opponentBackZones);
+        this.ownGraveyardTop = ownGraveyardTop;
+        this.opponentGraveyardTop = opponentGraveyardTop;
         this.yourTurn = yourTurn;
         this.archerTargets = new HashMap<>(archerTargets);
 
@@ -256,6 +262,8 @@ public class BoardPanel extends JPanel {
         ownBack = new ArrayList<>();
         opponentBackZones = new ArrayList<>();
         opponentHandCount = 0;
+        ownGraveyardTop = null;
+        opponentGraveyardTop = null;
         yourTurn = false;
         gameOver = false;
         draggedCard = null;
@@ -448,6 +456,7 @@ public class BoardPanel extends JPanel {
         drawOwnHand(graphics);
         drawFrontZones(graphics);
         drawBackZones(graphics);
+        drawGraveyards(graphics);
         drawArcherTargets(graphics);
 
         if (draggedCard != null) {
@@ -487,6 +496,25 @@ public class BoardPanel extends JPanel {
             arrows.fillPolygon(head);
         }
         arrows.dispose();
+    }
+
+    private void drawGraveyards(Graphics2D graphics) {
+        if (ownGraveyardTop != null) {
+            drawGraveyardCard(graphics, getPlayerUtilityRectangle(PLAYER_FRONT_Y), ownGraveyardTop);
+        }
+        if (opponentGraveyardTop != null) {
+            drawGraveyardCard(graphics, getOpponentUtilityRectangle(OPPONENT_FRONT_Y), opponentGraveyardTop);
+        }
+    }
+
+    private void drawGraveyardCard(Graphics2D graphics, Rectangle zone, ClientCard card) {
+        /* Repaint the box first - its GRAVEYARD label is wider than a card and would peek out. */
+        graphics.setColor(GRAVEYARD_GRAY);
+        graphics.fill(zone);
+        graphics.setColor(Color.BLACK);
+        graphics.draw(zone);
+
+        CardRenderer.draw(graphics, getFieldCardRectangle(zone), card, false);
     }
 
     private void drawBoard(Graphics2D graphics) {

@@ -1,14 +1,17 @@
 package game.server.cards;
 
+import game.server.cards.spells.ShiftingSpellCard;
+
 public class DamageBuffForStrategy extends UnitBuff{
-    public DamageBuffForStrategy(Unit wrapped, int bonusDamage) {
+    public DamageBuffForStrategy(Unit wrapped, Spell spell) {
         super(
-                wrapped.getName() + " (+Buff)",
-                wrapped.getDescription(),
-                0,            // Buff energy cost
                 wrapped,
-                0,            // bonusHealth
-                bonusDamage   // bonusDamage
+                spell
         );
+    }
+
+    @Override
+    protected int damageBonus() {
+        return 1;
     }
 }

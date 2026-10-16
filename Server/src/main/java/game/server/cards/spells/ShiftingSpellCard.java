@@ -2,7 +2,6 @@ package game.server.cards.spells;
 
 import game.server.cards.AdaptableSpell;
 import game.server.cards.Card;
-import game.server.cards.SpellType;
 
 public class ShiftingSpellCard extends AdaptableSpell {
 

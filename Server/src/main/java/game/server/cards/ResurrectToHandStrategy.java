@@ -11,8 +11,8 @@ public class ResurrectToHandStrategy implements SpellStrategy {
 
         // If the current spell is already in the graveyard, the "previous" card is at size() - 2.
         // If there are at least 2 cards in the graveyard, pull the second-to-last card.
-        if (graveyard.size() >= 2) {
-            Card targetCard = graveyard.remove(graveyard.size() - 2);
+        if (!graveyard.isEmpty()) {
+            Card targetCard = graveyard.remove(graveyard.size() - 1);
             caster.getHand().add(targetCard);
         }
     }

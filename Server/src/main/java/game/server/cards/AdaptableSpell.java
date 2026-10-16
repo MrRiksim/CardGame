@@ -13,7 +13,7 @@ public class AdaptableSpell extends Spell {
     public AdaptableSpell(String name, String description, int energyCost) {
         super(name, description, energyCost, SpellType.SPECIAL);
 
-        strategies.put(SpellTargetContext.TargetZone.ALLY_UNIT, new BuffAllyStrategy(1));
+        strategies.put(SpellTargetContext.TargetZone.ALLY_UNIT, new BuffAllyStrategy());
         strategies.put(SpellTargetContext.TargetZone.ENEMY_UNIT, new DamageEnemyStrategy(2));
         strategies.put(SpellTargetContext.TargetZone.GRAVEYARD, new ResurrectToHandStrategy());
         strategies.put(SpellTargetContext.TargetZone.DECK, new DrawFromDeckStrategy(2));

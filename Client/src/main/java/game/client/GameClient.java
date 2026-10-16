@@ -108,7 +108,7 @@ public class GameClient extends WebSocketClient {
     private void handleStateMessage(String message) {
         try {
             String[] parts = message.split("\\|", -1);
-            if (parts.length != 14 && parts.length != 15) {
+            if (parts.length != 16 && parts.length != 17) {
                 return;
             }
 
@@ -125,10 +125,12 @@ public class GameClient extends WebSocketClient {
             List<Integer> opponentBackZones = parseZoneList(parts[11]);
             Integer ownSecondsLeft = parseSeconds(parts[12]);
             Integer opponentSecondsLeft = parseSeconds(parts[13]);
+            ClientCard ownGraveyardTop = parseGraveyardTop(parts[14]);
+            ClientCard opponentGraveyardTop = parseGraveyardTop(parts[15]);
 
             boolean yourTurn = turnPlayer == myPlayerNumber;
-            Map<Integer, Integer> archerTargets = parts.length == 15
-                    ? parseArcherTargets(parts[14]) : Map.of();
+            Map<Integer, Integer> archerTargets = parts.length == 17
+                    ? parseArcherTargets(parts[16]) : Map.of();
 
             window.updateGame(
                     matchId,
@@ -143,6 +145,8 @@ public class GameClient extends WebSocketClient {
                     opponentBackZones,
                     ownSecondsLeft,
                     opponentSecondsLeft,
+                    ownGraveyardTop,
+                    opponentGraveyardTop,
                     yourTurn,
                     archerTargets
             );
@@ -247,7 +251,8 @@ public class GameClient extends WebSocketClient {
 
         for (String entry : data.split(";")) {
             String[] parts = entry.split(",");
-            if (parts.length != 9) {
+
+            if (parts.length != 12) {
                 continue;
             }
 
@@ -261,7 +266,10 @@ public class GameClient extends WebSocketClient {
                     Integer.parseInt(parts[6]),
                     parseElement(parts[7]),
                     parts[8],
-                    Integer.parseInt(parts[0])
+                    Integer.parseInt(parts[0]),
+                    parts[9].equals("1"),
+                    parts[10].equals("1"),
+                    Integer.parseInt(parts[11])
             ));
         }
         return units;
@@ -317,6 +325,11 @@ public class GameClient extends WebSocketClient {
         } catch (IllegalArgumentException e) {
             return SpellType.SPECIAL;
         }
+    }
+
+    private ClientCard parseGraveyardTop(String data) {
+        List<ClientCard> cards = parseHand(data);
+        return cards.isEmpty() ? null : cards.get(0);
     }
 
     public void joinQueue(GameMode mode) {

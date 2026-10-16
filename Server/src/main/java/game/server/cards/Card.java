@@ -42,13 +42,12 @@ public abstract class Card {
     }
 
     /*
-     * Deliberately NO image path / file name / asset folder here. The
-     * server only needs to referee the game - it never draws anything - so
-     * it has no reason to know how a card looks. It sends the client a
-     * card's kind + name (see Match.buildStateFor), and the client's own
-     * CardArt class maps that to an asset path on its side. That keeps the
-     * two projects properly decoupled: a re-skin or new piece of artwork
-     * never touches server code, and the server has no filesystem/asset
-     * concerns baked into its model at all.
+     * The card that should actually land in the graveyard when this one is
+     * discarded - normally just itself. Player.sendToGraveyard asks every card
+     * this, so overriding it is all a card type has to do to change what a
+     * graveyard receives (see Unit and UnitBuff).
      */
+    public Card prepareForGraveyard() {
+        return this;
+    }
 }

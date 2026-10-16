@@ -1,6 +1,6 @@
 package game.server.cards;
 
-import game.server.cards.spells.ArmorSpell;
+import game.server.cards.spells.HealthBoostSpell;
 import game.server.cards.spells.DamagePotionSpell;
 import game.server.cards.spells.LightningStrike;
 import game.server.cards.traps.BearTrap;
@@ -9,6 +9,8 @@ import game.server.cards.units.Knight;
 import game.server.cards.spells.ShiftingSpellCard;
 import game.server.cards.units.Skelly;
 import game.server.cards.units.Tombstone;
+import game.server.cards.spells.ShieldSpell;
+import game.server.cards.spells.CrippleSpell;
 
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
@@ -27,7 +29,7 @@ import java.util.function.Supplier;
  * class and adding one line to {@link #CARD_POOL}; nothing else changes.
  * Note that the two buff spells never hand out a {@code UnitBuff} here -
  * that's a decorator created only when the spell is actually cast (see
- * {@code ArmorSpell.apply}), never something drawn into a hand.
+ * {@code HealthBoostSpell.apply}), never something drawn into a hand.
  *
  * <p>For now every card is equally likely and hands/draws simply pick at
  * random from the cards below; a real deck-building system can replace
@@ -39,7 +41,7 @@ public class CardFactory {
             Knight::create,
             LightningStrike::create,
             BearTrap::create,
-            ArmorSpell::create,
+            HealthBoostSpell::create,
             DamagePotionSpell::create,
             () -> new SkeletonCardAdapter(
                     new SkeletonCard(5,5, 1, 2, 2, 3)
@@ -47,7 +49,9 @@ public class CardFactory {
             Archer::create,
             ShiftingSpellCard::create,
             Skelly::create,
-            Tombstone::create
+            Tombstone::create,
+            ShieldSpell::create,
+            CrippleSpell::create
     );
 
     private CardFactory() {

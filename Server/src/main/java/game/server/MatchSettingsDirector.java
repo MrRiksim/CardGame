@@ -13,8 +13,6 @@ import java.util.concurrent.ThreadLocalRandom;
  */
 public class MatchSettingsDirector {
 
-    private static final int SPEED_MATCH_MINUTES = 10;
-
     public StandardMatch buildStandardMatch() {
         return new StandardMatchBuilder()
                 .setHealth(25)
@@ -28,7 +26,7 @@ public class MatchSettingsDirector {
                 .setHealth(25)
                 .setEnergy(6, 2)
                 .setHandSizes(5, 7)
-                .setTimer(minutesToMillis(SPEED_MATCH_MINUTES))
+                .setTimer(minutesToMillis(10))
                 .getProduct();
     }
 

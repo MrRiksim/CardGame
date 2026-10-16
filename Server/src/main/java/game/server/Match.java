@@ -12,6 +12,8 @@ import java.util.concurrent.ThreadLocalRandom;
 import game.server.cards.units.Archer;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.ArrayList;
+import java.util.List;
 
 
 
@@ -166,8 +168,8 @@ public class Match {
          */
         spell.apply(this, player, targetUnit);
 
-        if (targetUnit != null && targetUnit.isDead()) {
-            destroyUnit(targetUnit);
+        if (targetUnit != null) {
+            resolveUnitState(targetUnit);
         }
 
         /*
@@ -186,11 +188,12 @@ public class Match {
     }
 
     private boolean isValidSpellTarget(Spell spell, Player caster, Unit target) {
-        return switch (spell.getSpellType()) {
+        boolean allowedByType = switch (spell.getSpellType()) {
             case DAMAGE -> target != null && ownerOf(target) == getOpponent(caster);
             case BUFF -> target != null && ownerOf(target) == caster;
             case SPECIAL -> true;
         };
+        return allowedByType && spell.canTarget(this, caster, target);
     }
 
     /*
@@ -290,9 +293,7 @@ public class Match {
 
             if (defendingUnit != null) {
                 defendingUnit.takeDamage(attackingUnit.getDamage());
-                if (defendingUnit.isDead()) {
-                    destroyUnit(defendingUnit);
-                }
+                resolveUnitState(defendingUnit);
             } else {
                 defender.takeDamage(attackingUnit.getDamage());
             }
@@ -472,6 +473,58 @@ public class Match {
         return null;
     }
 
+    public synchronized boolean isEnemyUnit(Player player, Unit unit) {
+        return ownerOf(unit) == getOpponent(player);
+    }
+
+    /* Cripple: every buff off, newest first, into the unit owner's graveyard. */
+    public synchronized void stripBuffs(Unit target) {
+        Player owner = ownerOf(target);
+        if (owner == null || !(target instanceof UnitBuff)) {
+            return;
+        }
+
+        Unit current = target;
+        while (current instanceof UnitBuff buff) {
+            owner.sendToGraveyard(buff);
+            current = buff.getWrapped();
+        }
+        replaceInZones(owner, target, current);
+    }
+
+    /*
+     * After anything that can hurt a unit: send spent buffs to the graveyard
+     * (newest first), put the unit that is left back in its zone, then run the
+     * death check. Does nothing if the unit is no longer on the field, which
+     * is the case after a buff spell or Cripple replaced it.
+     */
+    private void resolveUnitState(Unit unit) {
+        Player owner = ownerOf(unit);
+        if (owner == null) {
+            return;
+        }
+
+        List<Card> discarded = new ArrayList<>();
+        Unit current = unit.shedSpentBuffs(discarded);
+        for (Card card : discarded) {
+            owner.sendToGraveyard(card);
+        }
+
+        replaceInZones(owner, unit, current);
+
+        if (current.isDead()) {
+            destroyUnit(current);
+        }
+    }
+
+    private String serializeGraveyardTop(Player player) {
+        List<Card> graveyard = player.getGraveyard();
+        if (graveyard.isEmpty()) {
+            return "-";
+        }
+        return serializeHandCard(graveyard.get(graveyard.size() - 1));
+    }
+
     public synchronized void endMatch() {
         active = false;
     }
@@ -540,6 +593,8 @@ public class Match {
                 + "|" + serializeOccupiedZones(opponent.getBackZones())
                 + "|" + serializeRemainingSeconds(viewer)
                 + "|" + serializeRemainingSeconds(opponent)
+                + "|" + serializeGraveyardTop(viewer)
+                + "|" + serializeGraveyardTop(opponent)
                 + "|" + serializeArcherTargets(viewer);
     }
 
@@ -623,7 +678,10 @@ public class Match {
                     .append(",").append(base.getEnergyCost())
                     .append(",").append(unit.getHealth()).append(",").append(unit.getMaxHealth())
                     .append(",").append(unit.getDamage()).append(",").append(unit.getElement())
-                    .append(",").append(unit.hasClan() ? unit.getClan() : "NONE");
+                    .append(",").append(unit.hasClan() ? unit.getClan() : "NONE")
+                    .append(",").append(unit.isHealthBuffed() ? 1 : 0)
+                    .append(",").append(unit.isDamageBuffed() ? 1 : 0)
+                    .append(",").append(unit.getShieldCount());
         }
 
         return result.isEmpty() ? "-" : result.toString();

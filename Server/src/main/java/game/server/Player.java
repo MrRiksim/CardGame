@@ -154,6 +154,6 @@ public class Player {
     }
 
     public void sendToGraveyard(Card card) {
-        graveyard.add(card);
+        graveyard.add(card.prepareForGraveyard());
     }
 }

@@ -1,60 +1,110 @@
 package game.server.cards;
+
 import game.server.Match;
 import game.server.Player;
 
+import java.util.List;
+
 /**
- * <b>Design pattern - Decorator.</b> Component = {@link Unit}, ConcreteComponent =
- * a drawable unit like Knight, Decorator = this class, ConcreteDecorator =
- * a specific buff (see {@code ArmorBuff}, {@code DamagePotionBuff}). A
- * buffed unit is just another {@code Unit} as far as the rest of the game
- * is concerned - it sits in the same front-zone slot, takes damage and
- * attacks exactly the same way - which is the whole point of decorating
- * instead of, say, adding a "buffs" list field to Unit that every call site
- * would need to remember to account for.
- *
- * <p>Unlike a textbook decorator that forwards every call live to the
- * wrapped object, this one takes a one-time snapshot of the wrapped unit's
- * current stats (plus its own bonus) at construction time and becomes the
- * new authoritative Unit from then on. That avoids a subtle bug a live
- * "wrapped.getHealth() + bonus" decorator would have: health is clamped at
- * 0, so a permanently-reapplied bonus on top of an already-dead wrapped
- * unit would make that unit impossible to actually kill. Taking a snapshot
- * means there is always exactly one real health counter in play - the
- * current outermost layer's own - no matter how many buffs are stacked.
- *
- * <p>{@code wrapped} is kept purely so a dying unit can be unwound layer by
- * layer - see {@code Match.destroyUnit} - newest buff first, oldest buff
- * second, and finally the original unit card, each sent to the graveyard
- * as its own card.
+ * Design pattern - Decorator (Component = Unit, Decorator = this class,
+ * ConcreteDecorators = the individual buffs). Live-delegating: the base unit
+ * owns the one real health counter and every layer adds its own contribution
+ * on top when asked. Damage passes through the layers from the outermost
+ * (newest) inward: each layer's absorb() takes what it can and hands the rest
+ * on, and whatever gets all the way through hurts the base unit. A layer with
+ * nothing left reports isSpent() and shedSpentBuffs() splices it out.
  */
 public abstract class UnitBuff extends Unit {
 
-    private final Unit wrapped;
+    /* Not final: repointed past a spent layer beneath this one. */
+    private Unit wrapped;
+    /*
+     * The spell card this buff was created from. What goes to the graveyard
+     * (and so what can be pulled back out of it) is this spell, never the buff
+     * itself, which is a Unit and would be playable as one.
+     */
+    private final Spell source;
 
-    protected UnitBuff(
-            String name,
-            String description,
-            int energyCost,
-            Unit wrapped,
-            int bonusHealth,
-            int bonusDamage) {
-
-        super(
-                name,
-                description,
-                energyCost,
-                wrapped.getHealth() + bonusHealth,
-                wrapped.getMaxHealth() + bonusHealth,
-                wrapped.getDamage() + bonusDamage,
-                wrapped.getElement(),
-                wrapped.getClan()
-        );
-
+    protected UnitBuff(Unit wrapped, Spell source) {
+        super(source.getName(), source.getDescription(), source.getEnergyCost(),
+                0, 0, wrapped.getElement(), wrapped.getClan());
         this.wrapped = wrapped;
+        this.source = source;
     }
 
     public Unit getWrapped() {
         return wrapped;
+    }
+
+    /* What this particular layer contributes; a buff overrides only what it affects. */
+    protected int healthBonus() {
+        return 0;
+    }
+
+    protected int damageBonus() {
+        return 0;
+    }
+
+    protected int shieldLayers() {
+        return 0;
+    }
+
+    /* Takes its share of a hit, returns what is left to pass inward. Only called with damage > 0. */
+    protected int absorb(int damage) {
+        return damage;
+    }
+
+    protected boolean isSpent() {
+        return false;
+    }
+
+    @Override
+    public int getHealth() {
+        return wrapped.getHealth() + healthBonus();
+    }
+
+    @Override
+    public int getMaxHealth() {
+        return wrapped.getMaxHealth() + healthBonus();
+    }
+
+    @Override
+    public int getDamage() {
+        return wrapped.getDamage() + damageBonus();
+    }
+
+    /* A hit for 0 isn't a hit - otherwise Tombstone (0 damage) would pop a Shield. */
+    @Override
+    public void takeDamage(int amount) {
+        if (amount <= 0) {
+            return;
+        }
+        wrapped.takeDamage(absorb(amount));
+    }
+
+    @Override
+    public void heal(int amount) {
+        wrapped.heal(amount);
+    }
+
+    @Override
+    public boolean isDead() {
+        return wrapped.isDead();
+    }
+
+    @Override
+    public boolean isHealthBuffed() {
+        return healthBonus() > 0 || wrapped.isHealthBuffed();
+    }
+
+    @Override
+    public boolean isDamageBuffed() {
+        return damageBonus() > 0 || wrapped.isDamageBuffed();
+    }
+
+    @Override
+    public int getShieldCount() {
+        return wrapped.getShieldCount() + shieldLayers();
     }
 
     @Override
@@ -64,6 +114,27 @@ public abstract class UnitBuff extends Unit {
 
     @Override
     public void onOwnerTurnStart(Match match, Player owner) {
-        getWrapped().onOwnerTurnStart(match, owner);
+        wrapped.onOwnerTurnStart(match, owner);
+    }
+
+    /* Outermost first, so spent layers land in `discarded` newest to oldest. */
+    @Override
+    public Unit shedSpentBuffs(List<Card> discarded) {
+        boolean spent = isSpent();
+        if (spent) {
+            discarded.add(this);
+        }
+        wrapped = wrapped.shedSpentBuffs(discarded);
+        return spent ? wrapped : this;
+    }
+
+    @Override
+    public Card prepareForGraveyard() {
+        return source.prepareForGraveyard();
+    }
+
+    @Override
+    public void reset() {
+        wrapped.reset();
     }
 }

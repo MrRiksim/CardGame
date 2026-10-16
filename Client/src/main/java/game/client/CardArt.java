@@ -17,11 +17,13 @@ public final class CardArt {
             "Knight", "knight.png",
             "Lightning Strike", "lightning_strike.png",
             "Bear Trap", "bear_trap.png",
-            "Armor", "armor.png",
+            "Health Boost", "health_boost.png",
             "Damage Potion", "damage_potion.png",
             "Shifting Spell","shifting_spell.png",
             "Skelly", "skelly.png",
-            "Tombstone","tombstone.png"
+            "Tombstone","tombstone.png",
+            "Cripple", "cripple.png",
+            "Shield", "shield.png"
     );
 
     private CardArt() {

@@ -165,6 +165,8 @@ public class GameWindow {
             List<Integer> opponentBackZones,
             Integer ownSecondsLeft,
             Integer opponentSecondsLeft,
+            ClientCard ownGraveyardTop,
+            ClientCard opponentGraveyardTop,
             boolean yourTurn,
             Map<Integer, Integer> archerTargets) {
 
@@ -178,7 +180,8 @@ public class GameWindow {
             boardPanel.setVisible(true);
             boardPanel.updateState(
                     ownHand, opponentHandCount, ownFront, opponentFront,
-                    ownBack, opponentBackZones, yourTurn, archerTargets);
+                    ownBack, opponentBackZones, ownGraveyardTop, opponentGraveyardTop,
+                    yourTurn, archerTargets);
 
 
             if (yourTurn) {

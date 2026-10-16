@@ -14,7 +14,20 @@ public record ClientUnit(
         int damage,
         Element element,
         String clan,
-        int zoneIndex) implements ClientCard {
+        int zoneIndex,
+        boolean healthBuffed,
+        boolean damageBuffed,
+        int shieldCount) implements ClientCard {
+
+    /* Units in a hand or a graveyard never carry buffs, so existing callers don't change. */
+    public ClientUnit(
+            String id, String name, int energyCost, String description,
+            int health, int maxHealth, int damage, Element element,
+            String clan, int zoneIndex) {
+
+        this(id, name, energyCost, description, health, maxHealth, damage, element, clan,
+                zoneIndex, false, false, 0);
+    }
 
     @Override
     public CardKind kind() {

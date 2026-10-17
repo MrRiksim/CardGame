@@ -800,6 +800,16 @@ public class Match {
         return -1;
     }
 
+    public synchronized int findEmptyBackZone(Player owner) {
+        Trap[] zones = owner.getBackZones();
+        for (int i = zones.length - 1; i >= 0; i--) {
+            if (zones[i] == null) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
     /*
      * Places a unit directly into a zone with no energy cost and no hand
      * involved - used by UnitCreator.spawn for passive-effect cards like
@@ -815,6 +825,17 @@ public class Match {
         }
         owner.getFrontZones()[zoneIndex] = unit;
         checkTraps(getOpponent(owner), new GameEvent(GameEvent.Type.UNIT_PLAYED, owner, unit));
+    }
+
+    /*
+     * Places a trap face-down for free, for creators. Unlike a unit, a trap
+     * appearing isn't an event anything reacts to, so there is no trap check.
+     */
+    public synchronized void placeTrapForFree(Player owner, int zoneIndex, Trap trap) {
+        if (zoneIndex < 0 || zoneIndex >= NUMBER_OF_ZONES || owner.getBackZones()[zoneIndex] != null) {
+            return;
+        }
+        owner.getBackZones()[zoneIndex] = trap;
     }
 
     /*

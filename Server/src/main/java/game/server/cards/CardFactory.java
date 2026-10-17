@@ -1,16 +1,8 @@
 package game.server.cards;
 
-import game.server.cards.spells.HealthBoostSpell;
-import game.server.cards.spells.DamagePotionSpell;
-import game.server.cards.spells.LightningStrike;
-import game.server.cards.traps.BearTrap;
-import game.server.cards.units.Archer;
-import game.server.cards.units.Knight;
-import game.server.cards.spells.ShiftingSpellCard;
-import game.server.cards.units.Skelly;
-import game.server.cards.units.Tombstone;
-import game.server.cards.spells.ShieldSpell;
-import game.server.cards.spells.CrippleSpell;
+import game.server.cards.spells.*;
+import game.server.cards.traps.*;
+import game.server.cards.units.*;
 
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
@@ -51,7 +43,9 @@ public class CardFactory {
             Skelly::create,
             Tombstone::create,
             ShieldSpell::create,
-            CrippleSpell::create
+            CrippleSpell::create,
+            Hunter::create,
+            Brewer::create
     );
 
     private CardFactory() {

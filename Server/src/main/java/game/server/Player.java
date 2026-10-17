@@ -107,9 +107,22 @@ public class Player {
     }
 
     public void drawCard() {
-        if (hand.size() < settings.maxHandSize()) {
+        if (!isHandFull()) {
             hand.add(CardFactory.createRandomCard());
         }
+    }
+
+    public boolean isHandFull() {
+        return hand.size() >= settings.maxHandSize();
+    }
+
+    /* Adds a card if there is room. Returns whether it did. */
+    public boolean addToHand(Card card) {
+        if (isHandFull()) {
+            return false;
+        }
+        hand.add(card);
+        return true;
     }
 
     public void drawTwoCardsFromDeck() {

@@ -332,8 +332,30 @@ public class Match {
         if (unit == null) {
             return;
         }
+        // Destroy any shallow copies linked to this unit first
+        destroyShallowCopiesOf(unit);
+
         removeFromZones(player1, unit);
         removeFromZones(player2, unit);
+    }
+
+    private void destroyShallowCopiesOf(Unit original) {
+        destroyShallowCopiesInZones(player1, original);
+        destroyShallowCopiesInZones(player2, original);
+    }
+
+    private void destroyShallowCopiesInZones(Player owner, Unit original) {
+        Unit[] zones = owner.getFrontZones();
+        for (int i = 0; i < zones.length; i++) {
+            Unit zoneUnit = zones[i];
+            // If this unit is a shallow copy of the destroyed original, eliminate it too
+            if (zoneUnit != null && zoneUnit.getShallowOriginal() == original) {
+                zones[i] = null;
+                sendToGraveyardLayered(owner, zoneUnit);
+                // Recursively clear out any chains of copies
+                destroyShallowCopiesOf(zoneUnit);
+            }
+        }
     }
 
     private void removeFromZones(Player owner, Unit unit) {

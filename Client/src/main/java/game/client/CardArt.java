@@ -13,17 +13,19 @@ import java.util.Map;
  */
 public final class CardArt {
 
-    private static final Map<String, String> FILE_NAME_OVERRIDES = Map.of(
-            "Knight", "knight.png",
-            "Lightning Strike", "lightning_strike.png",
-            "Bear Trap", "bear_trap.png",
-            "Health Boost", "health_boost.png",
-            "Damage Potion", "damage_potion.png",
-            "Shifting Spell","shifting_spell.png",
-            "Skelly", "skelly.png",
-            "Tombstone","tombstone.png",
-            "Cripple", "cripple.png",
-            "Shield", "shield.png"
+    private static final Map<String, String> FILE_NAME_OVERRIDES = Map.ofEntries(
+            Map.entry("Knight", "knight.png"),
+            Map.entry("Lightning Strike", "lightning_strike.png"),
+            Map.entry("Bear Trap", "bear_trap.png"),
+            Map.entry("Health Boost", "health_boost.png"),
+            Map.entry("Damage Potion", "damage_potion.png"),
+            Map.entry("Shifting Spell", "shifting_spell.png"),
+            Map.entry("Skelly", "skelly.png"),
+            Map.entry("Tombstone", "tombstone.png"),
+            Map.entry("Cripple", "cripple.png"),
+            Map.entry("Shield", "shield.png"),
+            Map.entry("Phantom Mirror", "Phantom_Mirror_Spell.png"),
+            Map.entry("Essence Replication", "Essence_Replication_Spell.png")
     );
 
     private CardArt() {

@@ -13,7 +13,7 @@ public class DrawFromDeckStrategy implements SpellStrategy {
 
     @Override
     public void execute(Player caster, SpellTargetContext context, Match match) {
-        for (int i = 0; i < amountToDraw; i++) {
+        for (int i = 0; i <= amountToDraw; i++) {
             caster.drawTwoCardsFromDeck();
         }
     }

@@ -48,6 +48,9 @@ public abstract class UnitBuff extends Unit {
     protected int shieldLayers() {
         return 0;
     }
+    public Spell getSource() {
+        return source;
+    }
 
     /* Takes its share of a hit, returns what is left to pass inward. Only called with damage > 0. */
     protected int absorb(int damage) {
@@ -136,5 +139,30 @@ public abstract class UnitBuff extends Unit {
     @Override
     public void reset() {
         wrapped.reset();
+    }
+
+    @Override
+    public Unit cloneShallow() {
+        try {
+            // Uses reflection to invoke the subclass constructor (Unit wrapped, Spell source)
+            return this.getClass()
+                    .getConstructor(Unit.class, Spell.class)
+                    .newInstance(this.wrapped, this.source);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to shallow clone buff: " + getClass().getName(), e);
+        }
+    }
+
+    @Override
+    public Unit cloneDeep() {
+        try {
+            // Recursively deep clones the wrapped unit stack beneath this buff
+            Unit clonedWrapped = (this.wrapped != null) ? this.wrapped.cloneDeep() : null;
+            return this.getClass()
+                    .getConstructor(Unit.class, Spell.class)
+                    .newInstance(clonedWrapped, this.source);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to deep clone buff: " + getClass().getName(), e);
+        }
     }
 }

@@ -56,6 +56,10 @@ public abstract class Unit extends Card {
         this.clan = clan;
     }
 
+    public abstract Unit cloneShallow();
+
+    public abstract Unit cloneDeep();
+
     public int getHealth() {
         return health;
     }
@@ -144,4 +148,17 @@ public abstract class Unit extends Card {
         reset();
         return this;
     }
+    private Unit shallowOriginal = null;
+
+    public void setShallowOriginal(Unit original) {
+        // If the original is already a clone, chain back to the root original
+        this.shallowOriginal = (original != null && original.shallowOriginal != null)
+                ? original.shallowOriginal
+                : original;
+    }
+
+    public Unit getShallowOriginal() {
+        return shallowOriginal;
+    }
+
 }

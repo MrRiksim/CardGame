@@ -95,4 +95,26 @@ class SkeletonCardAdapter extends Unit {
     public boolean isDead() {
         return card.isDeadCheck();}
 
+    // Shallow Copy: Shares the same inner SkeletonCard reference
+    @Override
+    public Unit cloneShallow() {
+        // Create the shallow copy adapter (shares reference to the inner SkeletonCard)
+        SkeletonCardAdapter clone = new SkeletonCardAdapter(this.card);
+
+        // Link it back to this original unit so it collapses when this original dies
+        clone.setShallowOriginal(this);
+
+        return clone;
+    }
+
+    // Deep Copy: Instantiates a brand-new SkeletonCard instance
+    @Override
+    public Unit cloneDeep() {
+        SkeletonCard newSkeleton = new SkeletonCard(
+                card.getMaxHealth(), card.getHP(), card.getArmor(),
+                card.getDamage(), card.getHitCount(), card.manaCost()
+        );
+        return new SkeletonCardAdapter(newSkeleton);
+        // Completely new SkeletonCard object!
+    }
 }

@@ -27,6 +27,19 @@ public class AdaptableSpell extends Spell {
     }
 
     @Override
+    public boolean canTarget(Match match, Player caster, Unit target) {
+        // If a unit target is provided, it's valid (ally or enemy unit)
+        if (target != null) {
+            return match.ownerOf(target) == caster || match.getOpponent(caster) == match.ownerOf(target);
+        }
+
+        // If no unit target is provided, it must be dropped on Deck or Graveyard UI elements.
+        // If your client sends explicit context for Deck/Graveyard drops, validate them here.
+        // For now, returning true only if targeted correctly, but let's prevent empty board drops.
+        return false;
+    }
+
+    @Override
     public void apply(Match match, Player caster, Unit target) {
         if (target != null) {
             SpellTargetContext.TargetZone zone = (match.getOpponent(caster) == match.ownerOf(target))
@@ -34,13 +47,10 @@ public class AdaptableSpell extends Spell {
                     : SpellTargetContext.TargetZone.ALLY_UNIT;
             applyAdaptable(match, caster, new SpellTargetContext(zone, target));
         } else {
-            // Fallback when played without a unit target (e.g. dropped on Deck/Graveyard)
-            // If caster has cards in graveyard, resurrect; otherwise draw from deck
-            SpellTargetContext.TargetZone zone = caster.getGraveyard().isEmpty()
-                    ? SpellTargetContext.TargetZone.DECK
-                    : SpellTargetContext.TargetZone.GRAVEYARD;
-
-            applyAdaptable(match, caster, new SpellTargetContext(zone, null));
+            // REMOVE the automatic fallback if dropped on an empty field zone.
+            // Only execute deck/graveyard strategies if explicitly dropped on those UI targets.
+            // (Depending on how your client passes deck/graveyard targets, check context here).
+            return;
         }
     }
 }

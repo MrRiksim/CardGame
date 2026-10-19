@@ -17,6 +17,8 @@ import java.util.concurrent.TimeUnit;
 import game.server.commands.GameCommand;
 import game.server.commands.ChooseArcherTargetCommand;
 
+import game.server.GameStatistics;
+
 /**
  * Protocol v3 message formats handled here:
  *
@@ -289,6 +291,7 @@ public class MatchmakingService {
         defeated.send("YOU_LOSE");
 
         match.endMatch();
+        GameStatistics.getInstance().recordMatchCompleted();
         archerCommandHistory.remove(match.getPlayer1());
         archerCommandHistory.remove(match.getPlayer2());
         activeMatches.remove(match.getId());
@@ -296,6 +299,7 @@ public class MatchmakingService {
         playerMatches.remove(defeated.getConnection());
 
         System.out.println("Match " + match.getId() + " ended by defeat.");
+        System.out.println(GameStatistics.getInstance().getSummary());
     }
 
     /*

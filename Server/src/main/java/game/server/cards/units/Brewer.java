@@ -22,6 +22,33 @@ public class Brewer extends Unit {
         );
     }
 
+    private Brewer(String name, String description, int energyCost, int health, int maxHealth, int damage, Element element, String clan) {
+        super(name, description, energyCost, health, maxHealth, damage, element, clan);
+    }
+    // Inside your standard Unit subclass (e.g., Archer.java or a concrete unit base):
+    @Override
+    public Unit cloneShallow() {
+        Brewer clone = new Brewer(
+                getName(),
+                getDescription(),
+                getEnergyCost(),
+                getHealth(),
+                getMaxHealth(),
+                getDamage(),
+                getElement(),
+                getClan()
+        );
+        // Link the clone to this original unit
+        clone.setShallowOriginal(this);
+        return clone;
+    }
+
+    @Override
+    public Unit cloneDeep() {
+        // Return a new instance using current stats and a fresh ID
+        return new Brewer(getName(), getDescription(), getEnergyCost(), getHealth(), getMaxHealth(), getDamage(), getElement(), getClan());
+    }
+
     public static Brewer create() {
         return new Brewer();
     }

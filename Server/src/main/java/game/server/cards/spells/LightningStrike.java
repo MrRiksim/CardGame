@@ -1,5 +1,5 @@
 package game.server.cards.spells;
-
+import game.server.GameStatistics;
 import game.server.Match;
 import game.server.Player;
 import game.server.cards.Spell;
@@ -31,6 +31,12 @@ public class LightningStrike extends Spell {
         if (target == null) {
             return;
         }
+
+        int healthBefore = target.getHealth();
+
         target.takeDamage(DAMAGE_AMOUNT);
+
+        int actualDamage = healthBefore - target.getHealth();
+        GameStatistics.getInstance().recordDamageDealt(actualDamage);
     }
 }

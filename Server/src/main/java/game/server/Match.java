@@ -15,7 +15,7 @@ import java.util.Map;
 import java.util.ArrayList;
 import java.util.List;
 
-
+import game.server.GameStatistics;
 
 /**
  * Runs a single game between two players: playing units/spells/traps,
@@ -58,6 +58,7 @@ public class Match {
         this.player1 = new Player(connection1, settings);
         this.player2 = new Player(connection2, settings);
 
+        GameStatistics.getInstance().recordMatchStarted();
         /*
          * Randomly select who goes first.
          */
@@ -135,7 +136,7 @@ public class Match {
         player.getFrontZones()[zoneIndex] = unit;
 
         checkTraps(getOpponent(player), new GameEvent(GameEvent.Type.UNIT_PLAYED, player, unit));
-
+        GameStatistics.getInstance().recordCardPlayed();
         return true;
     }
 
@@ -184,6 +185,7 @@ public class Match {
             player.sendToGraveyard(spell);
         }
 
+        GameStatistics.getInstance().recordCardPlayed();
         return true;
     }
 
@@ -223,6 +225,7 @@ public class Match {
 
         player.getHand().remove(card);
         player.getBackZones()[zoneIndex] = trap;
+        GameStatistics.getInstance().recordCardPlayed();
         return true;
     }
 
@@ -289,13 +292,24 @@ public class Match {
                         + (defendingUnit == null ? "player" : defendingUnit.getName()));
             }
 
-
+            int damage = attackingUnit.getDamage();
 
             if (defendingUnit != null) {
-                defendingUnit.takeDamage(attackingUnit.getDamage());
+                int healthBefore = defendingUnit.getHealth();
+
+                defendingUnit.takeDamage(damage);
+
+                int actualDamage = healthBefore - defendingUnit.getHealth();
+                GameStatistics.getInstance().recordDamageDealt(actualDamage);
+
                 resolveUnitState(defendingUnit);
             } else {
-                defender.takeDamage(attackingUnit.getDamage());
+                int healthBefore = defender.getHealth();
+
+                defender.takeDamage(damage);
+
+                int actualDamage = healthBefore - defender.getHealth();
+                GameStatistics.getInstance().recordDamageDealt(actualDamage);
             }
         }
     }
@@ -332,8 +346,30 @@ public class Match {
         if (unit == null) {
             return;
         }
+        // Destroy any shallow copies linked to this unit first
+        destroyShallowCopiesOf(unit);
+
         removeFromZones(player1, unit);
         removeFromZones(player2, unit);
+    }
+
+    private void destroyShallowCopiesOf(Unit original) {
+        destroyShallowCopiesInZones(player1, original);
+        destroyShallowCopiesInZones(player2, original);
+    }
+
+    private void destroyShallowCopiesInZones(Player owner, Unit original) {
+        Unit[] zones = owner.getFrontZones();
+        for (int i = 0; i < zones.length; i++) {
+            Unit zoneUnit = zones[i];
+            // If this unit is a shallow copy of the destroyed original, eliminate it too
+            if (zoneUnit != null && zoneUnit.getShallowOriginal() == original) {
+                zones[i] = null;
+                sendToGraveyardLayered(owner, zoneUnit);
+                // Recursively clear out any chains of copies
+                destroyShallowCopiesOf(zoneUnit);
+            }
+        }
     }
 
     private void removeFromZones(Player owner, Unit unit) {

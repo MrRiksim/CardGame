@@ -227,6 +227,7 @@ public class BoardPanel extends JPanel {
             boolean yourTurn,
             Map<Integer, Integer> archerTargets) {
 
+
         this.ownHand = new ArrayList<>(ownHand);
         this.opponentHandCount = opponentHandCount;
         this.ownFront = new ArrayList<>(ownFront);
@@ -458,6 +459,7 @@ public class BoardPanel extends JPanel {
         drawBackZones(graphics);
         drawGraveyards(graphics);
         drawArcherTargets(graphics);
+
 
         if (draggedCard != null) {
             Rectangle rectangle = new Rectangle(

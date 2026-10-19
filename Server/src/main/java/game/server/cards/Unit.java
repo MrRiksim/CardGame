@@ -1,4 +1,7 @@
 package game.server.cards;
+import game.server.Match;
+import game.server.Player;
+import java.util.List;
 
 /**
  * A card that gets placed in one of the 5 front field zones. Units deal
@@ -53,6 +56,10 @@ public abstract class Unit extends Card {
         this.clan = clan;
     }
 
+    public abstract Unit cloneShallow();
+
+    public abstract Unit cloneDeep();
+
     public int getHealth() {
         return health;
     }
@@ -93,11 +100,65 @@ public abstract class Unit extends Card {
      * For a plain unit, itself. UnitBuff overrides this to walk back
      * through every stacked layer to the original card underneath - see
      * the note there and on Match.serializeFront for why that matters:
-     * a buff's OWN name/cost (e.g. "Armor", cost 1) is correct for its
+     * a buff's OWN name/cost (e.g. "Health Boost", cost 1) is correct for its
      * eventual graveyard entry, but wrong for what the unit should be
      * displayed and identified as while the buff is still active.
      */
     public Unit getBaseUnit() {
         return this;
     }
+
+    /*
+     * Hook for a unit with passive, start-of-turn behavior (see Tombstone).
+     * Called once for every unit belonging to whoever's turn just started;
+     * most units have nothing to do here, hence the no-op default.
+     */
+    public void onOwnerTurnStart(Match match, Player owner) {}
+
+    public boolean isHealthBuffed() {
+        return false;
+    }
+
+    public boolean isDamageBuffed() {
+        return false;
+    }
+
+    public int getShieldCount() {
+        return 0;
+    }
+
+    /* Plain unit has no layers. UnitBuff does the real work. */
+    public Unit shedSpentBuffs(List<Card> discarded) {
+        return this;
+    }
+
+    /*
+     * Puts every stat that can change during play back to its printed value.
+     * Called when the card goes to the graveyard, so a unit pulled back out of
+     * it isn't still at the 0 health it died with. Health is the only stat that
+     * changes today - anything that ever can change another needs restoring
+     * here too.
+     */
+    public void reset() {
+        health = maxHealth;
+    }
+
+    @Override
+    public Card prepareForGraveyard() {
+        reset();
+        return this;
+    }
+    private Unit shallowOriginal = null;
+
+    public void setShallowOriginal(Unit original) {
+        // If the original is already a clone, chain back to the root original
+        this.shallowOriginal = (original != null && original.shallowOriginal != null)
+                ? original.shallowOriginal
+                : original;
+    }
+
+    public Unit getShallowOriginal() {
+        return shallowOriginal;
+    }
+
 }

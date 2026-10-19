@@ -5,19 +5,19 @@ import game.server.Player;
 import game.server.cards.Spell;
 import game.server.cards.SpellType;
 import game.server.cards.Unit;
-import game.server.cards.units.buffs.ArmorBuff;
+import game.server.cards.units.buffs.ShieldBuff;
 
-public class ArmorSpell extends Spell {
+public class ShieldSpell extends Spell {
 
-    private ArmorSpell() {
-        super("Armor", "Grants a friendly unit 1 extra health.", 1, SpellType.BUFF);
+    private ShieldSpell() {
+        super("Shield", "Gives a friendly unit a shield that absorbs one hit of any size.", 2, SpellType.BUFF);
     }
 
     /*
      * Factory Method - see the note on CardFactory.
      */
-    public static ArmorSpell create() {
-        return new ArmorSpell();
+    public static ShieldSpell create() {
+        return new ShieldSpell();
     }
 
     @Override
@@ -25,6 +25,6 @@ public class ArmorSpell extends Spell {
         if (target == null) {
             return;
         }
-        match.replaceUnit(target, new ArmorBuff(target));
+        match.replaceUnit(target, new ShieldBuff(target, this));
     }
 }

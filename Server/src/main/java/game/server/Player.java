@@ -4,6 +4,10 @@ import game.server.cards.Card;
 import game.server.cards.CardFactory;
 import game.server.cards.Trap;
 import game.server.cards.Unit;
+import game.server.cards.Spell;
+import game.server.cards.spells.EssenceReplicationSpell;
+import game.server.cards.spells.PhantomMirrorSpell;
+import game.server.cards.spells.ShiftingSpellCard;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -53,6 +57,8 @@ public class Player {
         this.energy = settings.startingEnergy();
         this.remainingTimeMillis = settings.hasTimer() ? settings.timePerPlayerMillis() : 0;
 
+        hand.add(PhantomMirrorSpell.create());
+        hand.add(EssenceReplicationSpell.create());
         for (int i = 0; i < settings.startingHandSize(); i++) {
             hand.add(CardFactory.createRandomCard());
         }
@@ -104,9 +110,26 @@ public class Player {
     }
 
     public void drawCard() {
-        if (hand.size() < settings.maxHandSize()) {
+        if (!isHandFull()) {
             hand.add(CardFactory.createRandomCard());
         }
+    }
+
+    public boolean isHandFull() {
+        return hand.size() >= settings.maxHandSize();
+    }
+
+    /* Adds a card if there is room. Returns whether it did. */
+    public boolean addToHand(Card card) {
+        if (isHandFull()) {
+            return false;
+        }
+        hand.add(card);
+        return true;
+    }
+
+    public void drawTwoCardsFromDeck() {
+            hand.add(CardFactory.createRandomCard());
     }
 
     public long getRemainingTimeMillis() {
@@ -147,6 +170,6 @@ public class Player {
     }
 
     public void sendToGraveyard(Card card) {
-        graveyard.add(card);
+        graveyard.add(card.prepareForGraveyard());
     }
 }

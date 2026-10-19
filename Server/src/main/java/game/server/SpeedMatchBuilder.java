@@ -1,48 +1,43 @@
 package game.server;
 
 /**
- * Concrete Builder - identical to Standard except each player gets a
- * 10-minute total clock that runs down during their own turns.
+ * Concrete Builder for a match with a per-player clock. Holds one
+ * SpeedMatch. It doesn't extend StandardMatchBuilder, matching how the
+ * products themselves are kept separate, so the three shared steps are
+ * repeated here.
  */
 public class SpeedMatchBuilder implements MatchBuilder {
 
-    static final long TEN_MINUTES_MILLIS = 10L * 60 * 1000;
-
-    private int health;
-    private int energy;
-    private int energyPerTurn;
-    private int startingHandSize;
-    private int maxHandSize;
-    private Long timePerPlayerMillis;
+    private final SpeedMatch product = new SpeedMatch();
 
     @Override
-    public MatchBuilder setHealth() {
-        health = 25;
+    public SpeedMatchBuilder setHealth(int health) {
+        product.setStartingHealth(health);
         return this;
     }
 
     @Override
-    public MatchBuilder setEnergy() {
-        energy = 6;
-        energyPerTurn = 2;
+    public SpeedMatchBuilder setEnergy(int startingEnergy, int energyPerTurn) {
+        product.setStartingEnergy(startingEnergy);
+        product.setEnergyPerTurn(energyPerTurn);
         return this;
     }
 
     @Override
-    public MatchBuilder setHandSizes() {
-        startingHandSize = 5;
-        maxHandSize = 7;
+    public SpeedMatchBuilder setHandSizes(int startingHandSize, int maxHandSize) {
+        product.setStartingHandSize(startingHandSize);
+        product.setMaxHandSize(maxHandSize);
         return this;
     }
 
     @Override
-    public MatchBuilder setTimer() {
-        timePerPlayerMillis = TEN_MINUTES_MILLIS;
+    public SpeedMatchBuilder setTimer(long timePerPlayerMillis) {
+        product.setTimePerPlayerMillis(timePerPlayerMillis);
         return this;
     }
 
     @Override
-    public MatchSettings build() {
-        return new MatchSettings(health, energy, energyPerTurn, startingHandSize, maxHandSize, timePerPlayerMillis);
+    public SpeedMatch getProduct() {
+        return product;
     }
 }

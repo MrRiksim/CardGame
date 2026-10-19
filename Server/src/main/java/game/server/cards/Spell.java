@@ -33,4 +33,8 @@ public abstract class Spell extends Card {
      * spells that don't target a single unit.
      */
     public abstract void apply(Match match, Player caster, Unit target);
+
+    public boolean canTarget(Match match, Player caster, Unit target) {
+        return true;
+    }
 }

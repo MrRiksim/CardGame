@@ -80,7 +80,7 @@ public class GameWindow {
                 GameMode.SPEED));
         panel.add(createModeButton(
                 "Chaos Match",
-                "Health, energy, hand size - everything is randomized. Might even be timed.",
+                "Health, energy, hand size - and a 5 to 15 minute clock - are all randomized.",
                 GameMode.CHAOS));
 
         return panel;
@@ -165,6 +165,8 @@ public class GameWindow {
             List<Integer> opponentBackZones,
             Integer ownSecondsLeft,
             Integer opponentSecondsLeft,
+            ClientCard ownGraveyardTop,
+            ClientCard opponentGraveyardTop,
             boolean yourTurn,
             Map<Integer, Integer> archerTargets) {
 
@@ -178,7 +180,8 @@ public class GameWindow {
             boardPanel.setVisible(true);
             boardPanel.updateState(
                     ownHand, opponentHandCount, ownFront, opponentFront,
-                    ownBack, opponentBackZones, yourTurn, archerTargets);
+                    ownBack, opponentBackZones, ownGraveyardTop, opponentGraveyardTop,
+                    yourTurn, archerTargets);
 
 
             if (yourTurn) {

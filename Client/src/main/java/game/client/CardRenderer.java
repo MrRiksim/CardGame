@@ -36,6 +36,8 @@ public final class CardRenderer {
     private static final Color PLACEHOLDER_UNIT = new Color(200, 225, 205);
     private static final Color PLACEHOLDER_SPELL = new Color(212, 205, 235);
     private static final Color PLACEHOLDER_TRAP = new Color(230, 205, 205);
+    private static final Color BUFFED_STAT_TEXT = new Color(255, 90, 90);
+    private static final Color SHIELD_TINT = new Color(70, 130, 255, 50);
 
     /*
      * Card art doesn't exist yet in a fresh checkout (the assets/ folder is
@@ -58,11 +60,16 @@ public final class CardRenderer {
 
         drawArtwork(g, imageRect, card);
         drawTextArea(g, textRect, card, showDescription);
+
+        if (card instanceof ClientUnit unit) {
+            drawShieldTint(g, rect, unit.shieldCount());
+        }
+
         drawCostDiamond(g, rect, card.energyCost());
 
         if (card instanceof ClientUnit unit) {
-            drawStatSquare(g, rect, true, unit.health(), HP_COLOR);
-            drawStatSquare(g, rect, false, unit.damage(), DAMAGE_COLOR);
+            drawStatSquare(g, rect, true, unit.health(), HP_COLOR, unit.healthBuffed());
+            drawStatSquare(g, rect, false, unit.damage(), DAMAGE_COLOR, unit.damageBuffed());
         }
     }
 
@@ -87,8 +94,6 @@ public final class CardRenderer {
     }
 
     private static BufferedImage loadImage(String path) {
-        //IMAGE_CACHE.clear();
-
         if (IMAGE_CACHE.containsKey(path)) {
             return IMAGE_CACHE.get(path);
         }
@@ -188,8 +193,15 @@ public final class CardRenderer {
         drawCenteredNumber(g, energyCost, centerX, centerY, size);
     }
 
+    private static void drawShieldTint(Graphics2D g, Rectangle rect, int shieldCount) {
+        g.setColor(SHIELD_TINT);
+        for (int i = 0; i < shieldCount; i++) {
+            g.fillRect(rect.x, rect.y, rect.width, rect.height);
+        }
+    }
+
     private static void drawStatSquare(
-            Graphics2D g, Rectangle rect, boolean isLeft, int value, Color color) {
+            Graphics2D g, Rectangle rect, boolean isLeft, int value, Color color, boolean buffed) {
 
         int size = (int) Math.round(rect.width * 0.28);
         int margin = Math.max(1, rect.width / 30);
@@ -199,7 +211,7 @@ public final class CardRenderer {
         g.setColor(color);
         g.fillRect(x, y, size, size);
 
-        drawCenteredNumber(g, value, x + size / 2, y + size / 2, size, Color.WHITE);
+        drawCenteredNumber(g, value, x + size / 2, y + size / 2, size, buffed ? BUFFED_STAT_TEXT : Color.WHITE);
     }
 
     private static void drawCenteredNumber(Graphics2D g, int value, int centerX, int centerY, int boxSize) {

@@ -1,5 +1,8 @@
 package game.server.cards;
 
+import game.server.cards.spells.*;
+import game.server.cards.traps.*;
+import game.server.cards.units.*;
 import game.server.cards.spells.ArmorSpell;
 import game.server.cards.spells.DamagePotionSpell;
 import game.server.cards.spells.LightningStrike;
@@ -24,7 +27,7 @@ import java.util.function.Supplier;
  * class and adding one line to {@link #CARD_POOL}; nothing else changes.
  * Note that the two buff spells never hand out a {@code UnitBuff} here -
  * that's a decorator created only when the spell is actually cast (see
- * {@code ArmorSpell.apply}), never something drawn into a hand.
+ * {@code HealthBoostSpell.apply}), never something drawn into a hand.
  *
  * <p>For now every card is equally likely and hands/draws simply pick at
  * random from the cards below; a real deck-building system can replace
@@ -36,12 +39,19 @@ public class CardFactory {
             Knight::create,
             LightningStrike::create,
             BearTrap::create,
-            ArmorSpell::create,
+            HealthBoostSpell::create,
             DamagePotionSpell::create,
             () -> new SkeletonCardAdapter(
                     new SkeletonCard(5,5, 1, 2, 2, 3)
             ),
-            Archer::create
+            Archer::create,
+            ShiftingSpellCard::create,
+            Skelly::create,
+            Tombstone::create,
+            ShieldSpell::create,
+            CrippleSpell::create,
+            Hunter::create,
+            Brewer::create
     );
 
     private CardFactory() {

@@ -25,6 +25,6 @@ public class DamagePotionSpell extends Spell {
         if (target == null) {
             return;
         }
-        match.replaceUnit(target, new DamagePotionBuff(target));
+        match.replaceUnit(target, new DamagePotionBuff(target, this));
     }
 }

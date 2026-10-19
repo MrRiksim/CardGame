@@ -12,6 +12,8 @@ import java.util.concurrent.ThreadLocalRandom;
 import game.server.cards.units.Archer;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.ArrayList;
+import java.util.List;
 
 import game.server.GameStatistics;
 
@@ -70,7 +72,7 @@ public class Match {
 
     /*
      * ==========================================================
-     * Turn clock (Speed Match / a Chaos match that rolled a timer)
+     * Turn clock (Speed and Chaos Matches)
      * ==========================================================
      */
 
@@ -167,8 +169,8 @@ public class Match {
          */
         spell.apply(this, player, targetUnit);
 
-        if (targetUnit != null && targetUnit.isDead()) {
-            destroyUnit(targetUnit);
+        if (targetUnit != null) {
+            resolveUnitState(targetUnit);
         }
 
         /*
@@ -188,11 +190,12 @@ public class Match {
     }
 
     private boolean isValidSpellTarget(Spell spell, Player caster, Unit target) {
-        return switch (spell.getSpellType()) {
+        boolean allowedByType = switch (spell.getSpellType()) {
             case DAMAGE -> target != null && ownerOf(target) == getOpponent(caster);
             case BUFF -> target != null && ownerOf(target) == caster;
             case SPECIAL -> true;
         };
+        return allowedByType && spell.canTarget(this, caster, target);
     }
 
     /*
@@ -247,6 +250,7 @@ public class Match {
         currentTurn = getOpponent(player);
         turnNumber++;
         currentTurn.gainTurnResources();
+        runSpawnPhase(currentTurn);
         startTurnClock();
 
         archerTargets.clear();
@@ -288,8 +292,6 @@ public class Match {
                         + (defendingUnit == null ? "player" : defendingUnit.getName()));
             }
 
-
-
             int damage = attackingUnit.getDamage();
 
             if (defendingUnit != null) {
@@ -303,6 +305,8 @@ public class Match {
                 if (defendingUnit.isDead()) {
                     destroyUnit(defendingUnit);
                 }
+                defendingUnit.takeDamage(attackingUnit.getDamage());
+                resolveUnitState(defendingUnit);
             } else {
                 int healthBefore = defender.getHealth();
 
@@ -346,8 +350,30 @@ public class Match {
         if (unit == null) {
             return;
         }
+        // Destroy any shallow copies linked to this unit first
+        destroyShallowCopiesOf(unit);
+
         removeFromZones(player1, unit);
         removeFromZones(player2, unit);
+    }
+
+    private void destroyShallowCopiesOf(Unit original) {
+        destroyShallowCopiesInZones(player1, original);
+        destroyShallowCopiesInZones(player2, original);
+    }
+
+    private void destroyShallowCopiesInZones(Player owner, Unit original) {
+        Unit[] zones = owner.getFrontZones();
+        for (int i = 0; i < zones.length; i++) {
+            Unit zoneUnit = zones[i];
+            // If this unit is a shallow copy of the destroyed original, eliminate it too
+            if (zoneUnit != null && zoneUnit.getShallowOriginal() == original) {
+                zones[i] = null;
+                sendToGraveyardLayered(owner, zoneUnit);
+                // Recursively clear out any chains of copies
+                destroyShallowCopiesOf(zoneUnit);
+            }
+        }
     }
 
     private void removeFromZones(Player owner, Unit unit) {
@@ -379,7 +405,7 @@ public class Match {
         owner.sendToGraveyard(current);
     }
 
-    private Player ownerOf(Unit unit) {
+    public Player ownerOf(Unit unit) {
         for (Unit candidate : player1.getFrontZones()) {
             if (candidate == unit) {
                 return player1;
@@ -487,6 +513,58 @@ public class Match {
         return null;
     }
 
+    public synchronized boolean isEnemyUnit(Player player, Unit unit) {
+        return ownerOf(unit) == getOpponent(player);
+    }
+
+    /* Cripple: every buff off, newest first, into the unit owner's graveyard. */
+    public synchronized void stripBuffs(Unit target) {
+        Player owner = ownerOf(target);
+        if (owner == null || !(target instanceof UnitBuff)) {
+            return;
+        }
+
+        Unit current = target;
+        while (current instanceof UnitBuff buff) {
+            owner.sendToGraveyard(buff);
+            current = buff.getWrapped();
+        }
+        replaceInZones(owner, target, current);
+    }
+
+    /*
+     * After anything that can hurt a unit: send spent buffs to the graveyard
+     * (newest first), put the unit that is left back in its zone, then run the
+     * death check. Does nothing if the unit is no longer on the field, which
+     * is the case after a buff spell or Cripple replaced it.
+     */
+    private void resolveUnitState(Unit unit) {
+        Player owner = ownerOf(unit);
+        if (owner == null) {
+            return;
+        }
+
+        List<Card> discarded = new ArrayList<>();
+        Unit current = unit.shedSpentBuffs(discarded);
+        for (Card card : discarded) {
+            owner.sendToGraveyard(card);
+        }
+
+        replaceInZones(owner, unit, current);
+
+        if (current.isDead()) {
+            destroyUnit(current);
+        }
+    }
+
+    private String serializeGraveyardTop(Player player) {
+        List<Card> graveyard = player.getGraveyard();
+        if (graveyard.isEmpty()) {
+            return "-";
+        }
+        return serializeHandCard(graveyard.get(graveyard.size() - 1));
+    }
+
     public synchronized void endMatch() {
         active = false;
     }
@@ -555,6 +633,8 @@ public class Match {
                 + "|" + serializeOccupiedZones(opponent.getBackZones())
                 + "|" + serializeRemainingSeconds(viewer)
                 + "|" + serializeRemainingSeconds(opponent)
+                + "|" + serializeGraveyardTop(viewer)
+                + "|" + serializeGraveyardTop(opponent)
                 + "|" + serializeArcherTargets(viewer);
     }
 
@@ -638,7 +718,10 @@ public class Match {
                     .append(",").append(base.getEnergyCost())
                     .append(",").append(unit.getHealth()).append(",").append(unit.getMaxHealth())
                     .append(",").append(unit.getDamage()).append(",").append(unit.getElement())
-                    .append(",").append(unit.hasClan() ? unit.getClan() : "NONE");
+                    .append(",").append(unit.hasClan() ? unit.getClan() : "NONE")
+                    .append(",").append(unit.isHealthBuffed() ? 1 : 0)
+                    .append(",").append(unit.isDamageBuffed() ? 1 : 0)
+                    .append(",").append(unit.getShieldCount());
         }
 
         return result.isEmpty() ? "-" : result.toString();
@@ -739,5 +822,75 @@ public class Match {
         }
 
         return null;
+    }
+
+    /*
+     * The lowest-index empty front zone for `owner`, or -1 if the row is
+     * full. Written as its own method because it needs to be re-queried
+     * fresh for every individual creator's spawn attempt - including when
+     * an earlier creator in the same turn just filled the only open zone.
+     */
+    public synchronized int findEmptyFrontZone(Player owner) {
+        Unit[] zones = owner.getFrontZones();
+        for (int i = zones.length - 1; i >= 0; i--) {
+            if (zones[i] == null) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    public synchronized int findEmptyBackZone(Player owner) {
+        Trap[] zones = owner.getBackZones();
+        for (int i = zones.length - 1; i >= 0; i--) {
+            if (zones[i] == null) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    /*
+     * Places a unit directly into a zone with no energy cost and no hand
+     * involved - used by UnitCreator.spawn for passive-effect cards like
+     * Tombstone. Fires the same trap check as playUnit, so a unit appearing
+     * on the field is trap-relevant regardless of how it got there. (Worth
+     * a second look: BearTrap's condition was written for the enemy playing
+     * a unit CARD - whether a spawned unit should count is a judgment call,
+     * not something the earlier conversation settled either way.)
+     */
+    public synchronized void placeUnitForFree(Player owner, int zoneIndex, Unit unit) {
+        if (zoneIndex < 0 || zoneIndex >= NUMBER_OF_ZONES || owner.getFrontZones()[zoneIndex] != null) {
+            return;
+        }
+        owner.getFrontZones()[zoneIndex] = unit;
+        checkTraps(getOpponent(owner), new GameEvent(GameEvent.Type.UNIT_PLAYED, owner, unit));
+    }
+
+    /*
+     * Places a trap face-down for free, for creators. Unlike a unit, a trap
+     * appearing isn't an event anything reacts to, so there is no trap check.
+     */
+    public synchronized void placeTrapForFree(Player owner, int zoneIndex, Trap trap) {
+        if (zoneIndex < 0 || zoneIndex >= NUMBER_OF_ZONES || owner.getBackZones()[zoneIndex] != null) {
+            return;
+        }
+        owner.getBackZones()[zoneIndex] = trap;
+    }
+
+    /*
+     * Lets every unit belonging to `owner` act on its onOwnerTurnStart hook,
+     * in left-to-right zone order - a fixed snapshot, so a unit a creator
+     * spawns mid-phase doesn't also get a turn in the same phase it was
+     * just created, and so two creators fairly race for the same empty
+     * zone rather than racing against a mutating array.
+     */
+    private void runSpawnPhase(Player owner) {
+        Unit[] snapshot = owner.getFrontZones().clone();
+        for (Unit unit : snapshot) {
+            if (unit != null) {
+                unit.onOwnerTurnStart(this, owner);
+            }
+        }
     }
 }

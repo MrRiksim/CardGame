@@ -1,5 +1,6 @@
 package game.server.cards;
 
+import game.server.GameStatistics;
 import game.server.Match;
 import game.server.Player;
 
@@ -14,7 +15,14 @@ public class DamageEnemyStrategy implements SpellStrategy {
     public void execute(Player caster, SpellTargetContext context, Match match) {
         Unit target = context.getTargetUnit();
         if (target != null) {
+            int healthBefore = target.getHealth();
+
             target.takeDamage(damageAmount);
+
+            GameStatistics.getInstance().recordDamageDealt(
+                    healthBefore - target.getHealth()
+            );
+
             if (target.isDead()) {
                 match.destroyUnit(target);
             }

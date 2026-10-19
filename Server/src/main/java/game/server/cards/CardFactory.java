@@ -3,12 +3,6 @@ package game.server.cards;
 import game.server.cards.spells.*;
 import game.server.cards.traps.*;
 import game.server.cards.units.*;
-import game.server.cards.spells.ArmorSpell;
-import game.server.cards.spells.DamagePotionSpell;
-import game.server.cards.spells.LightningStrike;
-import game.server.cards.traps.BearTrap;
-import game.server.cards.units.Archer;
-import game.server.cards.units.Knight;
 
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;

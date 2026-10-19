@@ -302,10 +302,6 @@ public class Match {
                 int actualDamage = healthBefore - defendingUnit.getHealth();
                 GameStatistics.getInstance().recordDamageDealt(actualDamage);
 
-                if (defendingUnit.isDead()) {
-                    destroyUnit(defendingUnit);
-                }
-                defendingUnit.takeDamage(attackingUnit.getDamage());
                 resolveUnitState(defendingUnit);
             } else {
                 int healthBefore = defender.getHealth();

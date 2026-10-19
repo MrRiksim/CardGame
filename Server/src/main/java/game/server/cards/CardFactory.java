@@ -45,7 +45,9 @@ public class CardFactory {
             ShieldSpell::create,
             CrippleSpell::create,
             Hunter::create,
-            Brewer::create
+            Brewer::create,
+            ElementalCardService::createRandomElementalCard
+
     );
 
     private CardFactory() {

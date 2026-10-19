@@ -23,4 +23,30 @@ public class EarthUnit extends Unit {
         return new EarthUnit();
     }
 
+    private EarthUnit(String name, String description, int energyCost, int health, int maxHealth, int damage, Element element, String clan) {
+        super(name, description, energyCost, health, maxHealth, damage, element, clan);
+    }
+    @Override
+    public Unit cloneShallow() {
+        EarthUnit clone = new EarthUnit(
+                getName(),
+                getDescription(),
+                getEnergyCost(),
+                getHealth(),
+                getMaxHealth(),
+                getDamage(),
+                getElement(),
+                getClan()
+        );
+        // Link the clone to this original unit
+        clone.setShallowOriginal(this);
+        return clone;
+    }
+
+    @Override
+    public Unit cloneDeep() {
+        // Return a new instance using current stats and a fresh ID
+        return new EarthUnit(getName(), getDescription(), getEnergyCost(), getHealth(), getMaxHealth(), getDamage(), getElement(), getClan());
+    }
+
 }

@@ -87,7 +87,7 @@ public final class CardRenderer {
     }
 
     private static BufferedImage loadImage(String path) {
-        IMAGE_CACHE.clear();
+        //IMAGE_CACHE.clear();
 
         if (IMAGE_CACHE.containsKey(path)) {
             return IMAGE_CACHE.get(path);

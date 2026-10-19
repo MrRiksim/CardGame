@@ -19,4 +19,10 @@ public sealed interface PlayAction {
      */
     record SpellCast(String cardId, String targetUnitId) implements PlayAction {
     }
+
+    record ArcherTarget(String archerId, int targetSlot) implements PlayAction {
+    }
+
+    record UndoArcherTarget() implements PlayAction {
+    }
 }

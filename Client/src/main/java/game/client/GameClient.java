@@ -6,6 +6,8 @@ import org.java_websocket.handshake.ServerHandshake;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
 
 public class GameClient extends WebSocketClient {
 
@@ -33,6 +35,23 @@ public class GameClient extends WebSocketClient {
     @Override
     public void onMessage(String message) {
         System.out.println("Server: " + message);
+
+        if (message.equals("ARCHER_TARGET_OK")) {
+            window.showArcherCommandStatus("Archer target selected. You can undo before ending your turn.");
+            return;
+        }
+        if (message.equals("ARCHER_TARGET_REJECTED")) {
+            window.showArcherCommandStatus("Archer target selection rejected.");
+            return;
+        }
+        if (message.equals("ARCHER_UNDO_OK")) {
+            window.showArcherCommandStatus("Previous archer target restored.");
+            return;
+        }
+        if (message.equals("ARCHER_UNDO_REJECTED")) {
+            window.showArcherCommandStatus("No archer target selection can be undone now.");
+            return;
+        }
 
         if (message.equals("WAITING")) {
             window.setWaiting();
@@ -81,15 +100,15 @@ public class GameClient extends WebSocketClient {
     /*
      * STATE|matchId|turnPlayer|ownHealth|opponentHealth|ownEnergy|
      *       ownHand|opponentHandCount|ownFront|opponentFront|
-     *       ownBack|opponentBackZones|ownSecondsLeft|opponentSecondsLeft
+     *       ownBack|opponentBackZones|ownSecondsLeft|opponentSecondsLeft|ownArcherTargets
      *
-     * The last two are "-" (parsed here as null) for a match with no
+     * The two clock fields are "-" (parsed here as null) for a match with no
      * clock. See Match.buildStateFor (server) for the full format.
      */
     private void handleStateMessage(String message) {
         try {
             String[] parts = message.split("\\|", -1);
-            if (parts.length != 14) {
+            if (parts.length != 14 && parts.length != 15) {
                 return;
             }
 
@@ -108,6 +127,8 @@ public class GameClient extends WebSocketClient {
             Integer opponentSecondsLeft = parseSeconds(parts[13]);
 
             boolean yourTurn = turnPlayer == myPlayerNumber;
+            Map<Integer, Integer> archerTargets = parts.length == 15
+                    ? parseArcherTargets(parts[14]) : Map.of();
 
             window.updateGame(
                     matchId,
@@ -122,7 +143,8 @@ public class GameClient extends WebSocketClient {
                     opponentBackZones,
                     ownSecondsLeft,
                     opponentSecondsLeft,
-                    yourTurn
+                    yourTurn,
+                    archerTargets
             );
 
         } catch (Exception e) {
@@ -133,6 +155,26 @@ public class GameClient extends WebSocketClient {
 
     private Integer parseSeconds(String value) {
         return value.equals("-") ? null : Integer.parseInt(value);
+    }
+
+    private Map<Integer, Integer> parseArcherTargets(String data) {
+        Map<Integer, Integer> targets = new HashMap<>();
+        if (data.equals("-") || data.isEmpty()) {
+            return targets;
+        }
+        for (String entry : data.split(";")) {
+            String[] pair = entry.split(",");
+            if (pair.length != 2) {
+                throw new IllegalArgumentException("Invalid archer target entry");
+            }
+            int source = Integer.parseInt(pair[0]);
+            int target = Integer.parseInt(pair[1]);
+            if (source < 0 || source >= 5 || target < 0 || target >= 5) {
+                throw new IllegalArgumentException("Invalid archer target slot");
+            }
+            targets.put(source, target);
+        }
+        return targets;
     }
 
     private List<ClientCard> parseHand(String data) {
@@ -332,6 +374,18 @@ public class GameClient extends WebSocketClient {
         }
 
         System.err.println("WebSocket error: " + exception.getMessage());
+    }
+
+    public void chooseArcherTarget(String archerId, int targetSlot) {
+        if (isOpen()) {
+            send("ARCHER_TARGET|" + archerId + "|" + targetSlot);
+        }
+    }
+
+    public void undoArcherTarget() {
+        if (isOpen()) {
+            send("UNDO_ARCHER_TARGET");
+        }
     }
 
     public static void main(String[] args) throws Exception {

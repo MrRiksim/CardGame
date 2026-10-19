@@ -3,6 +3,7 @@ package game.client;
 import javax.swing.*;
 import java.awt.*;
 import java.util.List;
+import java.util.Map;
 
 public class GameWindow {
 
@@ -164,7 +165,8 @@ public class GameWindow {
             List<Integer> opponentBackZones,
             Integer ownSecondsLeft,
             Integer opponentSecondsLeft,
-            boolean yourTurn) {
+            boolean yourTurn,
+            Map<Integer, Integer> archerTargets) {
 
         SwingUtilities.invokeLater(() -> {
             gameOver = false;
@@ -176,7 +178,8 @@ public class GameWindow {
             boardPanel.setVisible(true);
             boardPanel.updateState(
                     ownHand, opponentHandCount, ownFront, opponentFront,
-                    ownBack, opponentBackZones, yourTurn);
+                    ownBack, opponentBackZones, yourTurn, archerTargets);
+
 
             if (yourTurn) {
                 turnLabel.setText("YOUR TURN");
@@ -279,6 +282,18 @@ public class GameWindow {
             client.playTrap(placement.cardId(), placement.zoneIndex());
         } else if (action instanceof PlayAction.SpellCast cast) {
             client.playSpell(cast.cardId(), cast.targetUnitId());
+        } else if (action instanceof PlayAction.ArcherTarget target) {
+            client.chooseArcherTarget(target.archerId(), target.targetSlot());
+        } else if (action instanceof PlayAction.UndoArcherTarget) {
+            client.undoArcherTarget();
         }
+    }
+
+    public void showArcherCommandStatus(String text) {
+        SwingUtilities.invokeLater(() -> {
+            if (inMatch && !gameOver) {
+                statusLabel.setText(text);
+            }
+        });
     }
 }

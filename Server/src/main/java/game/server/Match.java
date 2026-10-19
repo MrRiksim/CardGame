@@ -9,6 +9,12 @@ import game.server.cards.UnitBuff;
 
 import java.util.concurrent.ThreadLocalRandom;
 
+import game.server.cards.units.Archer;
+import java.util.HashMap;
+import java.util.Map;
+
+import game.server.GameStatistics;
+
 /**
  * Runs a single game between two players: playing units/spells/traps,
  * ending turns, resolving the end-of-turn attack phase and checking trap
@@ -42,12 +48,15 @@ public class Match {
      */
     private Long turnStartedAtMillis;
 
+    private final Map<String, Integer> archerTargets = new HashMap<>();
+
     public Match(int id, PlayerConnection connection1, PlayerConnection connection2, MatchSettings settings) {
         this.id = id;
         this.settings = settings;
         this.player1 = new Player(connection1, settings);
         this.player2 = new Player(connection2, settings);
 
+        GameStatistics.getInstance().recordMatchStarted();
         /*
          * Randomly select who goes first.
          */
@@ -125,7 +134,7 @@ public class Match {
         player.getFrontZones()[zoneIndex] = unit;
 
         checkTraps(getOpponent(player), new GameEvent(GameEvent.Type.UNIT_PLAYED, player, unit));
-
+        GameStatistics.getInstance().recordCardPlayed();
         return true;
     }
 
@@ -174,6 +183,7 @@ public class Match {
             player.sendToGraveyard(spell);
         }
 
+        GameStatistics.getInstance().recordCardPlayed();
         return true;
     }
 
@@ -212,6 +222,7 @@ public class Match {
 
         player.getHand().remove(card);
         player.getBackZones()[zoneIndex] = trap;
+        GameStatistics.getInstance().recordCardPlayed();
         return true;
     }
 
@@ -229,6 +240,8 @@ public class Match {
 
         if (turnNumber > 1) {
             runAttackPhase(player);
+        } else {
+            System.out.println("Attack phase skipped: first turn of the match.");
         }
 
         currentTurn = getOpponent(player);
@@ -236,6 +249,7 @@ public class Match {
         currentTurn.gainTurnResources();
         startTurnClock();
 
+        archerTargets.clear();
         return true;
     }
 
@@ -252,15 +266,50 @@ public class Match {
                 continue;
             }
 
-            Unit defendingUnit = defender.getFrontZones()[4 - zone];
+
+            Unit base = attackingUnit.getBaseUnit();
+            int targetSlot = NUMBER_OF_ZONES - 1 - zone;
+
+            if (base instanceof Archer) {
+                Integer selectedSlot = archerTargets.get(base.getId());
+
+                if (selectedSlot == null) {
+                    continue; // skip this archers attack
+                }
+
+                targetSlot = selectedSlot;
+            }
+
+            Unit defendingUnit = defender.getFrontZones()[targetSlot];
+
+            if (base instanceof Archer) {
+                System.out.println("Archer attacks enemy slot " + (targetSlot + 1)
+                        + " for " + attackingUnit.getDamage() + " damage; target: "
+                        + (defendingUnit == null ? "player" : defendingUnit.getName()));
+            }
+
+
+
+            int damage = attackingUnit.getDamage();
 
             if (defendingUnit != null) {
-                defendingUnit.takeDamage(attackingUnit.getDamage());
+                int healthBefore = defendingUnit.getHealth();
+
+                defendingUnit.takeDamage(damage);
+
+                int actualDamage = healthBefore - defendingUnit.getHealth();
+                GameStatistics.getInstance().recordDamageDealt(actualDamage);
+
                 if (defendingUnit.isDead()) {
                     destroyUnit(defendingUnit);
                 }
             } else {
-                defender.takeDamage(attackingUnit.getDamage());
+                int healthBefore = defender.getHealth();
+
+                defender.takeDamage(damage);
+
+                int actualDamage = healthBefore - defender.getHealth();
+                GameStatistics.getInstance().recordDamageDealt(actualDamage);
             }
         }
     }
@@ -505,7 +554,26 @@ public class Match {
                 + "|" + serializeOwnBack(viewer.getBackZones())
                 + "|" + serializeOccupiedZones(opponent.getBackZones())
                 + "|" + serializeRemainingSeconds(viewer)
-                + "|" + serializeRemainingSeconds(opponent);
+                + "|" + serializeRemainingSeconds(opponent)
+                + "|" + serializeArcherTargets(viewer);
+    }
+
+    private String serializeArcherTargets(Player viewer) {
+        StringBuilder result = new StringBuilder();
+        for (int zone = 0; zone < NUMBER_OF_ZONES; zone++) {
+            Unit unit = viewer.getFrontZones()[zone];
+            if (unit == null) {
+                continue;
+            }
+            Integer target = archerTargets.get(unit.getBaseUnit().getId());
+            if (target != null) {
+                if (!result.isEmpty()) {
+                    result.append(";");
+                }
+                result.append(zone).append(",").append(target);
+            }
+        }
+        return result.isEmpty() ? "-" : result.toString();
     }
 
     private String serializeRemainingSeconds(Player player) {
@@ -612,5 +680,64 @@ public class Match {
         }
 
         return result.isEmpty() ? "-" : result.toString();
+    }
+
+    public synchronized boolean chooseArcherTarget(
+            Player player, String archerId, int targetSlot) {
+        return restoreArcherTarget(player, archerId, targetSlot);
+    }
+
+    public synchronized int getTurnNumber() {
+        return turnNumber;
+    }
+
+    public synchronized Integer getArcherTarget(Player player, String archerId) {
+        Unit archer = findOwnedArcher(player, archerId);
+        return archer == null ? null : archerTargets.get(archer.getId());
+    }
+
+    // A null target restores the normal attack on the opposite slot.
+    public synchronized boolean restoreArcherTarget(
+            Player player, String archerId, Integer targetSlot) {
+
+        if (!active || currentTurn != player) {
+            return false;
+        }
+
+        if (targetSlot != null && (targetSlot < 0 || targetSlot >= NUMBER_OF_ZONES)) {
+            return false;
+        }
+
+        Unit archer = findOwnedArcher(player, archerId);
+        if (archer == null) {
+            return false;
+        }
+        if (targetSlot == null) {
+            archerTargets.remove(archer.getId());
+        } else {
+            archerTargets.put(archer.getId(), targetSlot);
+        }
+        return true;
+    }
+
+    private Unit findOwnedArcher(Player player, String archerId) {
+        if (player != player1 && player != player2) {
+            return null;
+        }
+
+        for (Unit unit : player.getFrontZones()) {
+            if (unit == null) {
+                continue;
+            }
+
+            Unit base = unit.getBaseUnit();
+
+            if (base instanceof Archer
+                    && (unit.getId().equals(archerId) || base.getId().equals(archerId))) {
+                return base;
+            }
+        }
+
+        return null;
     }
 }

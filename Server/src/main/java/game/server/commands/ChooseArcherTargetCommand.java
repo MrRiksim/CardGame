@@ -1,10 +1,10 @@
 package game.server.commands;
 
-import game.server.Match;
+import game.server.MatchFacade;
 import game.server.Player;
 
 public final class ChooseArcherTargetCommand implements GameCommand {
-    private final Match match;
+    private final MatchFacade matchFacade;
     private final Player player;
     private final String archerId;
     private final int targetSlot;
@@ -12,9 +12,9 @@ public final class ChooseArcherTargetCommand implements GameCommand {
     private int executionTurn;
     private boolean executed;
 
-    public ChooseArcherTargetCommand(Match match, Player player,
-                                    String archerId, int targetSlot) {
-        this.match = match;
+    public ChooseArcherTargetCommand(MatchFacade matchFacade, Player player,
+                                     String archerId, int targetSlot) {
+        this.matchFacade = matchFacade;
         this.player = player;
         this.archerId = archerId;
         this.targetSlot = targetSlot;
@@ -22,15 +22,15 @@ public final class ChooseArcherTargetCommand implements GameCommand {
 
     @Override
     public boolean execute() {
-        synchronized (match) {
+        synchronized (matchFacade) {
             if (executed) {
                 return false;
             }
-            previousTarget = match.getArcherTarget(player, archerId);
-            if (!match.chooseArcherTarget(player, archerId, targetSlot)) {
+            previousTarget = matchFacade.getArcherTarget(player, archerId);
+            if (!matchFacade.chooseArcherTarget(player, archerId, targetSlot)) {
                 return false;
             }
-            executionTurn = match.getTurnNumber();
+            executionTurn = matchFacade.getTurnNumber();
             executed = true;
             return true;
         }
@@ -38,11 +38,11 @@ public final class ChooseArcherTargetCommand implements GameCommand {
 
     @Override
     public boolean undo() {
-        synchronized (match) {
-            if (!executed || executionTurn != match.getTurnNumber()) {
+        synchronized (matchFacade) {
+            if (!executed || executionTurn != matchFacade.getTurnNumber()) {
                 return false;
             }
-            if (!match.restoreArcherTarget(player, archerId, previousTarget)) {
+            if (!matchFacade.restoreArcherTarget(player, archerId, previousTarget)) {
                 return false;
             }
             executed = false;

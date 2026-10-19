@@ -16,34 +16,13 @@ import java.util.concurrent.TimeUnit;
 
 import game.server.commands.GameCommand;
 import game.server.commands.ChooseArcherTargetCommand;
-
 import game.server.GameStatistics;
 
-/**
- * Protocol v3 message formats handled here:
- *
- * <pre>
- * JOIN|mode                        (STANDARD, SPEED or CHAOS - sent once,
- *                                    before anything else, to pick a queue)
- * PLAY_UNIT|cardId|zoneIndex
- * PLAY_SPELL|cardId|targetUnitId   (targetUnitId is "-" for no target)
- * PLAY_TRAP|cardId|zoneIndex
- * END_TURN
- * </pre>
- *
- * <p>Each {@link GameMode} gets its own, completely separate waiting
- * queue, so a player is only ever matched against someone who picked the
- * same mode - pairing a Chaos player's randomized rules with a Standard
- * opponent wouldn't make sense half-applied to only one side of the
- * match. The resolved {@link MatchSettings} for a match are assembled
- * fresh via {@link MatchSettingsDirector} once two same-mode players are
- * paired - see the Builder pattern notes on {@link MatchBuilder}.
- */
 public class MatchmakingService {
 
     private final Map<GameMode, Queue<PlayerConnection>> waitingPlayers = new EnumMap<>(GameMode.class);
-    private final Map<Integer, Match> activeMatches = new HashMap<>();
-    private final Map<PlayerConnection, Match> playerMatches = new HashMap<>();
+    private final Map<Integer, MatchFacade> activeMatches = new HashMap<>();
+    private final Map<PlayerConnection, MatchFacade> playerMatches = new HashMap<>();
     private final Map<Player, Deque<GameCommand>> archerCommandHistory = new HashMap<>();
     private final MatchSettingsDirector settingsDirector = new MatchSettingsDirector();
 
@@ -54,12 +33,6 @@ public class MatchmakingService {
             waitingPlayers.put(mode, new ArrayDeque<>());
         }
 
-        /*
-         * Only a timed match ever needs checking, but polling every active
-         * match once a second is cheap, and it's what lets a player lose
-         * the moment their clock runs out even if they never send another
-         * message (see Match.getDefeatedPlayer).
-         */
         ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(runnable -> {
             Thread thread = new Thread(runnable, "match-timeout-checker");
             thread.setDaemon(true);
@@ -80,18 +53,19 @@ public class MatchmakingService {
             int matchId = nextMatchId++;
             MatchSettings settings = createSettings(mode);
             Match match = new Match(matchId, opponent, connection, settings);
+            MatchFacade matchFacade = new MatchFacade(match);
 
-            activeMatches.put(matchId, match);
-            playerMatches.put(opponent, match);
-            playerMatches.put(connection, match);
+            activeMatches.put(matchId, matchFacade);
+            playerMatches.put(opponent, matchFacade);
+            playerMatches.put(connection, matchFacade);
 
             opponent.send("MATCH:" + matchId + ":PLAYER1");
             connection.send("MATCH:" + matchId + ":PLAYER2");
 
-            broadcastState(match);
+            broadcastState(matchFacade);
 
             System.out.println("Created " + mode + " Match " + matchId);
-            System.out.println("First turn: Player " + match.getCurrentTurnPlayerNumber());
+            System.out.println("First turn: Player " + matchFacade.getCurrentTurnPlayerNumber());
             return;
         }
 
@@ -114,12 +88,12 @@ public class MatchmakingService {
             return;
         }
 
-        Match match = playerMatches.get(connection);
-        if (match == null || !match.isActive()) {
+        MatchFacade matchFacade = playerMatches.get(connection);
+        if (matchFacade == null || !matchFacade.isActive()) {
             return;
         }
 
-        Player player = match.getPlayerFor(connection);
+        Player player = matchFacade.getPlayerFor(connection);
         if (player == null) {
             return;
         }
@@ -135,7 +109,7 @@ public class MatchmakingService {
                 int targetSlot = Integer.parseInt(parts[2]);
 
                 GameCommand command = new ChooseArcherTargetCommand(
-                        match, player, parts[1], targetSlot
+                        matchFacade, player, parts[1], targetSlot
                 );
 
                 boolean accepted = command.execute();
@@ -149,7 +123,7 @@ public class MatchmakingService {
                         accepted ? "ARCHER_TARGET_OK" : "ARCHER_TARGET_REJECTED"
                 );
                 if (accepted) {
-                    broadcastState(match);
+                    broadcastState(matchFacade);
                 }
             } catch (NumberFormatException e) {
                 connection.send("ARCHER_TARGET_REJECTED");
@@ -166,29 +140,29 @@ public class MatchmakingService {
             }
             connection.send(undone ? "ARCHER_UNDO_OK" : "ARCHER_UNDO_REJECTED");
             if (undone) {
-                broadcastState(match);
+                broadcastState(matchFacade);
             }
             return;
         }
 
         if (message.startsWith("PLAY_UNIT|")) {
-            handlePlayUnit(player, match, message);
+            handlePlayUnit(player, matchFacade, message);
             return;
         }
         if (message.startsWith("PLAY_SPELL|")) {
-            handlePlaySpell(player, match, message);
+            handlePlaySpell(player, matchFacade, message);
             return;
         }
         if (message.startsWith("PLAY_TRAP|")) {
-            handlePlayTrap(player, match, message);
+            handlePlayTrap(player, matchFacade, message);
             return;
         }
         if (message.equals("END_TURN")) {
-            if (match.endTurn(player)) {
+            if (matchFacade.endTurn(player)) {
                 archerCommandHistory.remove(player);
             }
-            broadcastState(match);
-            checkForGameOver(match);
+            broadcastState(matchFacade);
+            checkForGameOver(matchFacade);
             return;
         }
 
@@ -212,7 +186,7 @@ public class MatchmakingService {
         addPlayer(connection, mode);
     }
 
-    private void handlePlayUnit(Player player, Match match, String message) {
+    private void handlePlayUnit(Player player, MatchFacade matchFacade, String message) {
         try {
             String[] parts = message.split("\\|");
             if (parts.length != 3) {
@@ -222,18 +196,18 @@ public class MatchmakingService {
             String cardId = parts[1];
             int zoneIndex = Integer.parseInt(parts[2]);
 
-            boolean played = match.playUnit(player, cardId, zoneIndex);
+            boolean played = matchFacade.playUnit(player, cardId, zoneIndex);
             System.out.println(played ? "Unit play accepted." : "Unit play rejected.");
 
-            broadcastState(match);
-            checkForGameOver(match);
+            broadcastState(matchFacade);
+            checkForGameOver(matchFacade);
 
         } catch (NumberFormatException e) {
             System.out.println("Invalid unit play: " + message);
         }
     }
 
-    private void handlePlaySpell(Player player, Match match, String message) {
+    private void handlePlaySpell(Player player, MatchFacade matchFacade, String message) {
         String[] parts = message.split("\\|");
         if (parts.length != 3) {
             return;
@@ -241,16 +215,16 @@ public class MatchmakingService {
 
         String cardId = parts[1];
         String targetId = parts[2];
-        Unit target = targetId.equals("-") ? null : match.findUnitOnField(targetId);
+        Unit target = targetId.equals("-") ? null : matchFacade.findUnitOnField(targetId);
 
-        boolean played = match.playSpell(player, cardId, target);
+        boolean played = matchFacade.playSpell(player, cardId, target);
         System.out.println(played ? "Spell play accepted." : "Spell play rejected.");
 
-        broadcastState(match);
-        checkForGameOver(match);
+        broadcastState(matchFacade);
+        checkForGameOver(matchFacade);
     }
 
-    private void handlePlayTrap(Player player, Match match, String message) {
+    private void handlePlayTrap(Player player, MatchFacade matchFacade, String message) {
         try {
             String[] parts = message.split("\\|");
             if (parts.length != 3) {
@@ -260,58 +234,48 @@ public class MatchmakingService {
             String cardId = parts[1];
             int zoneIndex = Integer.parseInt(parts[2]);
 
-            boolean played = match.playTrap(player, cardId, zoneIndex);
+            boolean played = matchFacade.playTrap(player, cardId, zoneIndex);
             System.out.println(played ? "Trap play accepted." : "Trap play rejected.");
 
-            broadcastState(match);
+            broadcastState(matchFacade);
 
         } catch (NumberFormatException e) {
             System.out.println("Invalid trap play: " + message);
         }
     }
 
-    private void broadcastState(Match match) {
-        match.getPlayer1().send(match.buildStateFor(match.getPlayer1()));
-        match.getPlayer2().send(match.buildStateFor(match.getPlayer2()));
+    private void broadcastState(MatchFacade matchFacade) {
+        matchFacade.getPlayer1().send(matchFacade.getGameStateFor(matchFacade.getPlayer1()));
+        matchFacade.getPlayer2().send(matchFacade.getGameStateFor(matchFacade.getPlayer2()));
     }
 
-    /*
-     * Health-based defeat, or a timed match's clock running out, checked
-     * after anything that can deal damage or spend time (a unit attack, a
-     * damage spell, ending a turn, or this service's own periodic poll).
-     */
-    private void checkForGameOver(Match match) {
-        Player defeated = match.getDefeatedPlayer();
+    private void checkForGameOver(MatchFacade matchFacade) {
+        Player defeated = matchFacade.getDefeatedPlayer();
         if (defeated == null) {
             return;
         }
 
-        Player winner = match.getOpponent(defeated);
+        Player winner = matchFacade.getOpponent(defeated);
         winner.send("YOU_WIN");
         defeated.send("YOU_LOSE");
 
-        match.endMatch();
+        matchFacade.endMatch();
         GameStatistics.getInstance().recordMatchCompleted();
-        archerCommandHistory.remove(match.getPlayer1());
-        archerCommandHistory.remove(match.getPlayer2());
-        activeMatches.remove(match.getId());
+        archerCommandHistory.remove(matchFacade.getPlayer1());
+        archerCommandHistory.remove(matchFacade.getPlayer2());
+        activeMatches.remove(matchFacade.getId());
         playerMatches.remove(winner.getConnection());
         playerMatches.remove(defeated.getConnection());
 
-        System.out.println("Match " + match.getId() + " ended by defeat.");
+        System.out.println("Match " + matchFacade.getId() + " ended by defeat.");
         System.out.println(GameStatistics.getInstance().getSummary());
     }
 
-    /*
-     * A timed match's clock can run out without either player sending a
-     * message (they simply never acted), so this is the only thing that
-     * catches that case - everything else is reactive to a message.
-     */
     private synchronized void checkAllMatchesForTimeout() {
-        for (Match match : new ArrayList<>(activeMatches.values())) {
-            if (match.isActive() && match.hasTimer()) {
-                broadcastState(match);
-                checkForGameOver(match);
+        for (MatchFacade matchFacade : new ArrayList<>(activeMatches.values())) {
+            if (matchFacade.isActive() && matchFacade.hasTimer()) {
+                broadcastState(matchFacade);
+                checkForGameOver(matchFacade);
             }
         }
     }
@@ -324,26 +288,26 @@ public class MatchmakingService {
             }
         }
 
-        Match match = playerMatches.remove(connection);
-        if (match == null) {
+        MatchFacade matchFacade = playerMatches.remove(connection);
+        if (matchFacade == null) {
             return;
         }
 
-        Player player = match.getPlayerFor(connection);
-        Player opponent = match.getOpponent(player);
+        Player player = matchFacade.getPlayerFor(connection);
+        Player opponent = matchFacade.getOpponent(player);
 
-        match.endMatch();
-        archerCommandHistory.remove(match.getPlayer1());
-        archerCommandHistory.remove(match.getPlayer2());
+        matchFacade.endMatch();
+        archerCommandHistory.remove(matchFacade.getPlayer1());
+        archerCommandHistory.remove(matchFacade.getPlayer2());
         playerMatches.remove(opponent.getConnection());
-        activeMatches.remove(match.getId());
+        activeMatches.remove(matchFacade.getId());
 
-        System.out.println("Player " + match.getPlayerNumber(player)
-                + " disconnected from Match " + match.getId());
+        System.out.println("Player " + matchFacade.getPlayerNumber(player)
+                + " disconnected from Match " + matchFacade.getId());
 
         if (opponent.isConnected()) {
             opponent.send("YOU_WIN");
-            System.out.println("Player " + match.getPlayerNumber(opponent) + " wins.");
+            System.out.println("Player " + matchFacade.getPlayerNumber(opponent) + " wins.");
         }
     }
 }

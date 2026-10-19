@@ -98,10 +98,8 @@ class SkeletonCardAdapter extends Unit {
     // Shallow Copy: Shares the same inner SkeletonCard reference
     @Override
     public Unit cloneShallow() {
-        // Create the shallow copy adapter (shares reference to the inner SkeletonCard)
         SkeletonCardAdapter clone = new SkeletonCardAdapter(this.card);
 
-        // Link it back to this original unit so it collapses when this original dies
         clone.setShallowOriginal(this);
 
         return clone;

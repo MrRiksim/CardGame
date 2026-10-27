@@ -90,6 +90,22 @@ public class MatchFacade {
         return match.getPlayer1();
     }
 
+    public synchronized void addObserver(MatchObserver observer) {
+        match.addObserver(observer);
+    }
+
+    public synchronized void removeObserver(MatchObserver observer) {
+        match.removeObserver(observer);
+    }
+
+    public synchronized void notifyObservers() {
+        match.notifyObservers();
+    }
+
+    public synchronized void notifyObservers(GamePacket packet) {
+        match.notifyObservers(packet);
+    }
+
     public synchronized Player getPlayer2() {
         return match.getPlayer2();
     }

@@ -245,8 +245,8 @@ public class MatchmakingService {
     }
 
     private void broadcastState(MatchFacade matchFacade) {
-        matchFacade.getPlayer1().send(matchFacade.getGameStateFor(matchFacade.getPlayer1()));
-        matchFacade.getPlayer2().send(matchFacade.getGameStateFor(matchFacade.getPlayer2()));
+        matchFacade.notifyObservers();
+
     }
 
     private void checkForGameOver(MatchFacade matchFacade) {
@@ -299,6 +299,7 @@ public class MatchmakingService {
         matchFacade.endMatch();
         archerCommandHistory.remove(matchFacade.getPlayer1());
         archerCommandHistory.remove(matchFacade.getPlayer2());
+        matchFacade.removeObserver(connection);
         playerMatches.remove(opponent.getConnection());
         activeMatches.remove(matchFacade.getId());
 

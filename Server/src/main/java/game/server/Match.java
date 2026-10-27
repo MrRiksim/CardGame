@@ -51,12 +51,15 @@ public class Match {
     private Long turnStartedAtMillis;
 
     private final Map<String, Integer> archerTargets = new HashMap<>();
+    private final List<MatchObserver> observers = new ArrayList<>();
 
     public Match(int id, PlayerConnection connection1, PlayerConnection connection2, MatchSettings settings) {
         this.id = id;
         this.settings = settings;
         this.player1 = new Player(connection1, settings);
         this.player2 = new Player(connection2, settings);
+        addObserver(connection1);
+        addObserver(connection2);
 
         GameStatistics.getInstance().recordMatchStarted();
         /*
@@ -64,6 +67,35 @@ public class Match {
          */
         currentTurn = ThreadLocalRandom.current().nextBoolean() ? player1 : player2;
         startTurnClock();
+    }
+
+    public synchronized void addObserver(MatchObserver observer) {
+        if (observer != null && !observers.contains(observer)) {
+            observers.add(observer);
+        }
+    }
+
+    public synchronized void removeObserver(MatchObserver observer) {
+        observers.remove(observer);
+    }
+
+    public synchronized void notifyObservers() {
+        for (MatchObserver observer : new ArrayList<>(observers)) {
+            if (observer instanceof PlayerConnection connection) {
+                Player viewer = getPlayerFor(connection);
+                if (viewer != null) {
+                    observer.onMatchUpdate(new StatePacket(buildStateFor(viewer), new PlainTextSerializer()));
+                }
+            } else {
+                observer.onMatchUpdate(new StatePacket(buildStateFor(player1), new PlainTextSerializer()));
+            }
+        }
+    }
+
+    public synchronized void notifyObservers(GamePacket packet) {
+        for (MatchObserver observer : new ArrayList<>(observers)) {
+            observer.onMatchUpdate(packet);
+        }
     }
 
     public synchronized boolean hasTimer() {
@@ -423,6 +455,7 @@ public class Match {
      * face-up to the graveyard.
      */
     private void checkTraps(Player owner, GameEvent event) {
+        notifyObservers(new EventPacket(event, new JsonSerializer()));
         Trap[] zones = owner.getBackZones();
 
         for (int i = 0; i < zones.length; i++) {

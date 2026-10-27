@@ -3,7 +3,7 @@ package game.server;
 import org.java_websocket.WebSocket;
 import org.java_websocket.exceptions.WebsocketNotConnectedException;
 
-public class PlayerConnection {
+public class PlayerConnection implements MatchObserver {
 
     private final WebSocket socket;
 
@@ -17,6 +17,13 @@ public class PlayerConnection {
 
     public boolean isConnected() {
         return socket.isOpen();
+    }
+
+    @Override
+    public void onMatchUpdate(GamePacket packet) {
+        if (packet != null && packet.getPacketData() != null) {
+            send(packet.getPacketData());
+        }
     }
 
     public void send(String message) {

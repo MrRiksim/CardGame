@@ -2,15 +2,15 @@ package game.server;
 
 /**
  * <b>Design pattern - Builder (Product).</b> The rules for a match with no
- * clock. Built up one step at a time by {@link StandardMatchBuilder}; the
+ * clock. Built up one step at a time by {@link StandardMatchSettingsBuilder}; the
  * setters are package-private on purpose, so the builder (same package) is
  * the only thing meant to ever write to one of these. Everything else only
  * reads it through {@link MatchSettings}.
  *
- * <p>Deliberately separate from {@link SpeedMatch} rather than a parent of
+ * <p>Deliberately separate from {@link SpeedMatchSettings} rather than a parent of
  * it - the two share only the {@link MatchSettings} contract.
  */
-public class StandardMatch implements MatchSettings {
+public class StandardMatchSettings implements MatchSettings {
 
     private int startingHealth;
     private int startingEnergy;

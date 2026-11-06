@@ -15,7 +15,6 @@ import java.util.Map;
 import java.util.ArrayList;
 import java.util.List;
 
-import game.server.GameStatistics;
 import game.server.validation.PlayRequest;
 import game.server.validation.PlayValidationChains;
 import game.server.validation.PlayValidationHandler;
@@ -28,7 +27,7 @@ import game.server.validation.ValidationResult;
  *
  * <p>The numeric rules (starting health, energy, hand size, and whether
  * there's a turn clock at all) come in per-match via {@link MatchSettings}
- * - see {@link MatchBuilder} - rather than being fixed here. What IS fixed
+ * - see {@link MatchSettingsBuilder} - rather than being fixed here. What IS fixed
  * for every mode: +1 card and this match's energy-per-turn at the start of
  * each turn, and units attacking whatever is opposite them (or the player,
  * if the opposite zone is empty) at the end of every turn but the very

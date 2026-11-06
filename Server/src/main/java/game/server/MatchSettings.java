@@ -1,7 +1,7 @@
 package game.server;
 
 /**
- * Builder pattern - the contract both products (StandardMatch, SpeedMatch)
+ * Builder pattern - the contract both products (StandardMatchSettings, SpeedMatchSettings)
  * satisfy, so Match and Player can read either one without caring which.
  * It holds no data itself.
  */
@@ -15,7 +15,7 @@ public interface MatchSettings {
 
     /*
      * null means "no clock". Only a product that actually has one
-     * (SpeedMatch) overrides this.
+     * (SpeedMatchSettings) overrides this.
      */
     default Long timePerPlayerMillis() {
         return null;

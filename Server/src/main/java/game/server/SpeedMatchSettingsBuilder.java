@@ -2,42 +2,42 @@ package game.server;
 
 /**
  * Concrete Builder for a match with a per-player clock. Holds one
- * SpeedMatch. It doesn't extend StandardMatchBuilder, matching how the
+ * SpeedMatchSettings. It doesn't extend StandardMatchSettingsBuilder, matching how the
  * products themselves are kept separate, so the three shared steps are
  * repeated here.
  */
-public class SpeedMatchBuilder implements MatchBuilder {
+public class SpeedMatchSettingsBuilder implements MatchSettingsBuilder {
 
-    private final SpeedMatch product = new SpeedMatch();
+    private final SpeedMatchSettings product = new SpeedMatchSettings();
 
     @Override
-    public SpeedMatchBuilder setHealth(int health) {
+    public SpeedMatchSettingsBuilder setHealth(int health) {
         product.setStartingHealth(health);
         return this;
     }
 
     @Override
-    public SpeedMatchBuilder setEnergy(int startingEnergy, int energyPerTurn) {
+    public SpeedMatchSettingsBuilder setEnergy(int startingEnergy, int energyPerTurn) {
         product.setStartingEnergy(startingEnergy);
         product.setEnergyPerTurn(energyPerTurn);
         return this;
     }
 
     @Override
-    public SpeedMatchBuilder setHandSizes(int startingHandSize, int maxHandSize) {
+    public SpeedMatchSettingsBuilder setHandSizes(int startingHandSize, int maxHandSize) {
         product.setStartingHandSize(startingHandSize);
         product.setMaxHandSize(maxHandSize);
         return this;
     }
 
     @Override
-    public SpeedMatchBuilder setTimer(long timePerPlayerMillis) {
+    public SpeedMatchSettingsBuilder setTimer(long timePerPlayerMillis) {
         product.setTimePerPlayerMillis(timePerPlayerMillis);
         return this;
     }
 
     @Override
-    public SpeedMatch getProduct() {
+    public SpeedMatchSettings getProduct() {
         return product;
     }
 }

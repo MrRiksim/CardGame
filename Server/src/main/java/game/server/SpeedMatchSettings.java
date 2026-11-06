@@ -3,15 +3,15 @@ package game.server;
 /**
  * <b>Design pattern - Builder (Product).</b> The rules for a match with a
  * per-player clock. Built up one step at a time by
- * {@link SpeedMatchBuilder}; both a Speed match and a Chaos match produce
+ * {@link SpeedMatchSettingsBuilder}; both a Speed match and a Chaos match produce
  * one of these (Chaos just fills it with random numbers - see
  * {@link MatchSettingsDirector}).
  *
- * <p>Holds everything {@link StandardMatch} does plus the clock, but does
+ * <p>Holds everything {@link StandardMatchSettings} does plus the clock, but does
  * NOT extend it - the five shared fields are repeated here on purpose, and
  * the two classes are tied together only by {@link MatchSettings}.
  */
-public class SpeedMatch implements MatchSettings {
+public class SpeedMatchSettings implements MatchSettings {
 
     private int startingHealth;
     private int startingEnergy;

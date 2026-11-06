@@ -4,10 +4,8 @@ import game.server.cards.Card;
 import game.server.cards.CardFactory;
 import game.server.cards.Trap;
 import game.server.cards.Unit;
-import game.server.cards.Spell;
 import game.server.cards.spells.EssenceReplicationSpell;
 import game.server.cards.spells.PhantomMirrorSpell;
-import game.server.cards.spells.ShiftingSpellCard;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -20,7 +18,7 @@ import java.util.List;
  *
  * <p>The starting numbers (health, energy, hand size...) used to be fixed
  * constants here. Now that a match can be Standard, Speed or Chaos (see
- * {@link MatchBuilder}), they come in per-match as a {@link MatchSettings},
+ * {@link MatchSettingsBuilder}), they come in per-match as a {@link MatchSettings},
  * assembled once by whichever builder the match was created with.
  */
 public class Player {

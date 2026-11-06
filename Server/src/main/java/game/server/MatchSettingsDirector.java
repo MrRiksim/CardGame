@@ -8,21 +8,21 @@ import java.util.concurrent.ThreadLocalRandom;
  * apply what they're handed.
  *
  * Chaos has no builder of its own: it produces the same product TYPE as a
- * Speed match (a SpeedMatch), just filled with random numbers. Builders
+ * Speed match (a SpeedMatchSettings), just filled with random numbers. Builders
  * exist per product type, not per game mode.
  */
 public class MatchSettingsDirector {
 
-    public StandardMatch buildStandardMatch() {
-        return new StandardMatchBuilder()
+    public StandardMatchSettings buildStandardMatch() {
+        return new StandardMatchSettingsBuilder()
                 .setHealth(25)
                 .setEnergy(6, 2)
                 .setHandSizes(5, 7)
                 .getProduct();
     }
 
-    public SpeedMatch buildSpeedMatch() {
-        return new SpeedMatchBuilder()
+    public SpeedMatchSettings buildSpeedMatch() {
+        return new SpeedMatchSettingsBuilder()
                 .setHealth(25)
                 .setEnergy(6, 2)
                 .setHandSizes(5, 7)
@@ -30,8 +30,8 @@ public class MatchSettingsDirector {
                 .getProduct();
     }
 
-    public SpeedMatch buildChaosMatch() {
-        return new SpeedMatchBuilder()
+    public SpeedMatchSettings buildChaosMatch() {
+        return new SpeedMatchSettingsBuilder()
                 .setHealth(randomBetween(10, 40))
                 .setEnergy(randomBetween(0, 10), randomBetween(1, 4))
                 .setHandSizes(randomBetween(2, 6), randomBetween(6, 10))

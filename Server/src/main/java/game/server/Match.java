@@ -16,6 +16,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 import game.server.GameStatistics;
+import game.server.validation.PlayRequest;
+import game.server.validation.PlayValidationChains;
+import game.server.validation.PlayValidationHandler;
+import game.server.validation.ValidationResult;
 
 /**
  * Runs a single game between two players: playing units/spells/traps,
@@ -146,25 +150,14 @@ public class Match {
      * traps get a chance to react (see checkTraps).
      */
     public synchronized boolean playUnit(Player player, String cardId, int zoneIndex) {
-        if (!active || currentTurn != player) {
-            return false;
-        }
-        if (zoneIndex < 0 || zoneIndex >= NUMBER_OF_ZONES) {
-            return false;
-        }
-        if (player.getFrontZones()[zoneIndex] != null) {
+        PlayRequest request = PlayRequest.placement(this, player, cardId, zoneIndex);
+        if (!passesValidation(PlayValidationChains.UNIT_PLAY, request)) {
             return false;
         }
 
-        Card card = player.findInHand(cardId);
-        if (!(card instanceof Unit unit)) {
-            return false;
-        }
-        if (!player.spendEnergy(unit.getEnergyCost())) {
-            return false;
-        }
-
-        player.getHand().remove(card);
+        Unit unit = (Unit) request.getCard();
+        player.spendEnergy(unit.getEnergyCost());
+        player.getHand().remove(unit);
         player.getFrontZones()[zoneIndex] = unit;
 
         checkTraps(getOpponent(player), new GameEvent(GameEvent.Type.UNIT_PLAYED, player, unit));
@@ -178,22 +171,14 @@ public class Match {
      * optional for a SPECIAL spell.
      */
     public synchronized boolean playSpell(Player player, String cardId, Unit targetUnit) {
-        if (!active || currentTurn != player) {
+        PlayRequest request = PlayRequest.spellCast(this, player, cardId, targetUnit);
+        if (!passesValidation(PlayValidationChains.SPELL_PLAY, request)) {
             return false;
         }
 
-        Card card = player.findInHand(cardId);
-        if (!(card instanceof Spell spell)) {
-            return false;
-        }
-        if (!isValidSpellTarget(spell, player, targetUnit)) {
-            return false;
-        }
-        if (!player.spendEnergy(spell.getEnergyCost())) {
-            return false;
-        }
-
-        player.getHand().remove(card);
+        Spell spell = (Spell) request.getCard();
+        player.spendEnergy(spell.getEnergyCost());
+        player.getHand().remove(spell);
 
         /*
          * Strategy pattern in action: Match has no idea what this spell
@@ -221,13 +206,19 @@ public class Match {
         return true;
     }
 
-    private boolean isValidSpellTarget(Spell spell, Player caster, Unit target) {
-        boolean allowedByType = switch (spell.getSpellType()) {
-            case DAMAGE -> target != null && ownerOf(target) == getOpponent(caster);
-            case BUFF -> target != null && ownerOf(target) == caster;
-            case SPECIAL -> true;
-        };
-        return allowedByType && spell.canTarget(this, caster, target);
+    /*
+     * Design pattern note - Chain of Responsibility: every play starts its
+     * chain here and only sees the final answer. The chain only checks, so
+     * nothing has been spent or moved yet if it says no. The reason is
+     * server-side logging only - the client just gets the unchanged STATE
+     * broadcast, which is what snaps its card back.
+     */
+    private boolean passesValidation(PlayValidationHandler chain, PlayRequest request) {
+        ValidationResult result = chain.handle(request);
+        if (!result.accepted()) {
+            System.out.println("Play rejected: " + result.reason());
+        }
+        return result.accepted();
     }
 
     /*
@@ -237,25 +228,14 @@ public class Match {
      * opponent, never a trap's identity.
      */
     public synchronized boolean playTrap(Player player, String cardId, int zoneIndex) {
-        if (!active || currentTurn != player) {
-            return false;
-        }
-        if (zoneIndex < 0 || zoneIndex >= NUMBER_OF_ZONES) {
-            return false;
-        }
-        if (player.getBackZones()[zoneIndex] != null) {
+        PlayRequest request = PlayRequest.placement(this, player, cardId, zoneIndex);
+        if (!passesValidation(PlayValidationChains.TRAP_PLAY, request)) {
             return false;
         }
 
-        Card card = player.findInHand(cardId);
-        if (!(card instanceof Trap trap)) {
-            return false;
-        }
-        if (!player.spendEnergy(trap.getEnergyCost())) {
-            return false;
-        }
-
-        player.getHand().remove(card);
+        Trap trap = (Trap) request.getCard();
+        player.spendEnergy(trap.getEnergyCost());
+        player.getHand().remove(trap);
         player.getBackZones()[zoneIndex] = trap;
         GameStatistics.getInstance().recordCardPlayed();
         return true;
@@ -481,6 +461,10 @@ public class Match {
             return 2;
         }
         return -1;
+    }
+
+    public synchronized boolean isCurrentTurn(Player player) {
+        return currentTurn == player;
     }
 
     public synchronized int getCurrentTurnPlayerNumber() {

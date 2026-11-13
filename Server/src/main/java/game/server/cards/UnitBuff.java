@@ -120,6 +120,18 @@ public abstract class UnitBuff extends Unit {
         wrapped.onOwnerTurnStart(match, owner);
     }
 
+    /* Passed inward so the buff stays outside the group the rider creates or joins. */
+    @Override
+    public Unit attach(Unit rider) {
+        wrapped = wrapped.attach(rider);
+        return this;
+    }
+
+    @Override
+    public int getRiderCount() {
+        return wrapped.getRiderCount();
+    }
+
     /* Outermost first, so spent layers land in `discarded` newest to oldest. */
     @Override
     public Unit shedSpentBuffs(List<Card> discarded) {
@@ -141,13 +153,23 @@ public abstract class UnitBuff extends Unit {
         wrapped.reset();
     }
 
+    /*
+     * What a shallow clone of this buff wraps: normally the very same unit
+     * (a shallow copy shares the stack beneath it). A stack carrying riders
+     * gets that part cloned instead, which leaves the riders out - sharing
+     * them would hand the same rider cards back twice when both units die.
+     */
+    protected Unit shallowCloneTarget() {
+        return wrapped.getRiderCount() > 0 ? wrapped.cloneShallow() : wrapped;
+    }
+
     @Override
     public Unit cloneShallow() {
         try {
             // Uses reflection to invoke the subclass constructor (Unit wrapped, Spell source)
             return this.getClass()
                     .getConstructor(Unit.class, Spell.class)
-                    .newInstance(this.wrapped, this.source);
+                    .newInstance(shallowCloneTarget(), this.source);
         } catch (Exception e) {
             throw new RuntimeException("Failed to shallow clone buff: " + getClass().getName(), e);
         }

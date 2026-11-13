@@ -18,8 +18,8 @@ public class DamageBuffForStrategy extends UnitBuff {
 
     @Override
     public Unit cloneShallow() {
-        // Shallow copy shares the exact same wrapped unit reference
-        return new DamageBuffForStrategy(this.getWrapped(), this.getSource());
+        // Shallow copy shares the exact same wrapped unit reference (unless it carries riders, see UnitBuff)
+        return new DamageBuffForStrategy(shallowCloneTarget(), this.getSource());
     }
 
     @Override

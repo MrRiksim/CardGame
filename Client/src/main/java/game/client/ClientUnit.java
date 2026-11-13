@@ -17,16 +17,17 @@ public record ClientUnit(
         int zoneIndex,
         boolean healthBuffed,
         boolean damageBuffed,
-        int shieldCount) implements ClientCard {
+        int shieldCount,
+        int riderCount) implements ClientCard {
 
-    /* Units in a hand or a graveyard never carry buffs, so existing callers don't change. */
+    /* Units in a hand or a graveyard never carry buffs or riders, so existing callers don't change. */
     public ClientUnit(
             String id, String name, int energyCost, String description,
             int health, int maxHealth, int damage, Element element,
             String clan, int zoneIndex) {
 
         this(id, name, energyCost, description, health, maxHealth, damage, element, clan,
-                zoneIndex, false, false, 0);
+                zoneIndex, false, false, 0, 0);
     }
 
     @Override

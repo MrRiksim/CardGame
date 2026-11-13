@@ -38,6 +38,7 @@ public final class CardRenderer {
     private static final Color PLACEHOLDER_TRAP = new Color(230, 205, 205);
     private static final Color BUFFED_STAT_TEXT = new Color(255, 90, 90);
     private static final Color SHIELD_TINT = new Color(70, 130, 255, 50);
+    private static final Color RIDER_COLOR = new Color(110, 70, 150);
 
     /*
      * Card art doesn't exist yet in a fresh checkout (the assets/ folder is
@@ -70,7 +71,28 @@ public final class CardRenderer {
         if (card instanceof ClientUnit unit) {
             drawStatSquare(g, rect, true, unit.health(), HP_COLOR, unit.healthBuffed());
             drawStatSquare(g, rect, false, unit.damage(), DAMAGE_COLOR, unit.damageBuffed());
+            drawRiderBadge(g, rect, unit.riderCount());
         }
+    }
+
+    /*
+     * How many riders (see Jumpy) a unit carries, as a numbered circle just
+     * under its damage square - riders add damage, so it sits by that number.
+     */
+    private static void drawRiderBadge(Graphics2D g, Rectangle rect, int riderCount) {
+        if (riderCount <= 0) {
+            return;
+        }
+
+        int squareSize = (int) Math.round(rect.width * 0.28);
+        int size = (int) Math.round(rect.width * 0.24);
+        int margin = Math.max(1, rect.width / 30);
+        int x = rect.x + rect.width - margin - squareSize + (squareSize - size) / 2;
+        int y = rect.y + margin + squareSize + margin;
+
+        g.setColor(RIDER_COLOR);
+        g.fillOval(x, y, size, size);
+        drawCenteredNumber(g, riderCount, x + size / 2, y + size / 2, size, Color.WHITE);
     }
 
     private static void drawArtwork(Graphics2D g, Rectangle imageRect, ClientCard card) {

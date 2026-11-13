@@ -25,6 +25,8 @@ public final class PlayValidationChains {
 
     public static final PlayValidationHandler SPELL_PLAY = spellChain();
 
+    public static final PlayValidationHandler RIDER_ATTACH = riderChain();
+
     private PlayValidationChains() {
     }
 
@@ -48,6 +50,17 @@ public final class PlayValidationChains {
                 .linkTo(new CardKindHandler(Spell.class))
                 .linkTo(new SpellTargetTypeHandler())
                 .linkTo(new SpellCardRuleHandler())
+                .linkTo(new EnoughEnergyHandler());
+        return first;
+    }
+
+    private static PlayValidationHandler riderChain() {
+        PlayValidationHandler first = new MatchActiveHandler();
+        first.linkTo(new PlayersTurnHandler())
+                .linkTo(new CardInHandHandler())
+                .linkTo(new CardKindHandler(Unit.class))
+                .linkTo(new RiderCardHandler())
+                .linkTo(new OwnUnitTargetHandler())
                 .linkTo(new EnoughEnergyHandler());
         return first;
     }

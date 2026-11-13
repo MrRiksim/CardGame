@@ -40,6 +40,11 @@ public final class PlayRequest {
         return new PlayRequest(match, player, cardId, NO_ZONE, target);
     }
 
+    /* target is the unit the rider should be attached to. */
+    public static PlayRequest attachment(Match match, Player player, String cardId, Unit target) {
+        return new PlayRequest(match, player, cardId, NO_ZONE, target);
+    }
+
     public Match getMatch() {
         return match;
     }

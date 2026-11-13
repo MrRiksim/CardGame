@@ -6,6 +6,7 @@ import game.server.cards.Trap;
 import game.server.cards.Unit;
 import game.server.cards.spells.EssenceReplicationSpell;
 import game.server.cards.spells.PhantomMirrorSpell;
+import game.server.cards.units.Jumpy;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -55,8 +56,8 @@ public class Player {
         this.energy = settings.startingEnergy();
         this.remainingTimeMillis = settings.hasTimer() ? settings.timePerPlayerMillis() : 0;
 
-        hand.add(PhantomMirrorSpell.create());
-        hand.add(EssenceReplicationSpell.create());
+        hand.add(Jumpy.create());
+        hand.add(Jumpy.create());
         for (int i = 0; i < settings.startingHandSize(); i++) {
             hand.add(CardFactory.createRandomCard());
         }

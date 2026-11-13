@@ -285,6 +285,8 @@ public class GameWindow {
             client.playTrap(placement.cardId(), placement.zoneIndex());
         } else if (action instanceof PlayAction.SpellCast cast) {
             client.playSpell(cast.cardId(), cast.targetUnitId());
+        } else if (action instanceof PlayAction.RiderAttach attach) {
+            client.attachRider(attach.cardId(), attach.targetUnitId());
         } else if (action instanceof PlayAction.ArcherTarget target) {
             client.chooseArcherTarget(target.archerId(), target.targetSlot());
         } else if (action instanceof PlayAction.UndoArcherTarget) {

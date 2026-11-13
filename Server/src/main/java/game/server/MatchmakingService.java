@@ -157,6 +157,10 @@ public class MatchmakingService {
             handlePlayTrap(player, matchFacade, message);
             return;
         }
+        if (message.startsWith("ATTACH|")) {
+            handleAttach(player, matchFacade, message);
+            return;
+        }
         if (message.equals("END_TURN")) {
             if (matchFacade.endTurn(player)) {
                 archerCommandHistory.remove(player);
@@ -222,6 +226,21 @@ public class MatchmakingService {
 
         broadcastState(matchFacade);
         checkForGameOver(matchFacade);
+    }
+
+    /* ATTACH|cardId|targetUnitId - a rider (see Jumpy) dropped on one of the player's own units. */
+    private void handleAttach(Player player, MatchFacade matchFacade, String message) {
+        String[] parts = message.split("\\|");
+        if (parts.length != 3) {
+            return;
+        }
+
+        Unit target = matchFacade.findUnitOnField(parts[2]);
+
+        boolean played = matchFacade.attachRider(player, parts[1], target);
+        System.out.println(played ? "Rider attach accepted." : "Rider attach rejected.");
+
+        broadcastState(matchFacade);
     }
 
     private void handlePlayTrap(Player player, MatchFacade matchFacade, String message) {

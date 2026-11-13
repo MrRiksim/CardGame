@@ -22,6 +22,10 @@ public class MatchFacade {
         return match.playTrap(player, cardId, zoneIndex);
     }
 
+    public synchronized boolean attachRider(Player player, String cardId, Unit targetUnit) {
+        return match.attachRider(player, cardId, targetUnit);
+    }
+
     public synchronized boolean endTurn(Player player) {
         return match.endTurn(player);
     }

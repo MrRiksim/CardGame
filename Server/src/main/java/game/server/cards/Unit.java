@@ -133,6 +133,26 @@ public abstract class Unit extends Card {
     }
 
     /*
+     * Design pattern note - Composite: puts `rider` on this unit and returns
+     * what should now sit in this unit's zone. A plain unit can't hold
+     * anything, so it hands back a new UnitGroup carrying itself and the
+     * rider. UnitGroup overrides this to just add the rider, and UnitBuff
+     * passes it inward, so buffs always stay on the outside of a group.
+     */
+    public Unit attach(Unit rider) {
+        return new UnitGroup(this, rider);
+    }
+
+    /* Whether this card can be attached to another unit as a rider (see Jumpy). */
+    public boolean canRide() {
+        return false;
+    }
+
+    public int getRiderCount() {
+        return 0;
+    }
+
+    /*
      * Puts every stat that can change during play back to its printed value.
      * Called when the card goes to the graveyard, so a unit pulled back out of
      * it isn't still at the 0 health it died with. Health is the only stat that

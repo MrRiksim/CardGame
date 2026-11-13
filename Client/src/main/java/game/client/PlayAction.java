@@ -20,6 +20,14 @@ public sealed interface PlayAction {
     record SpellCast(String cardId, String targetUnitId) implements PlayAction {
     }
 
+    /*
+     * A unit card dropped on one of your own units, to ride it. Only the
+     * server knows which cards can ride (see Jumpy) - any other unit is
+     * rejected there and snaps back.
+     */
+    record RiderAttach(String cardId, String targetUnitId) implements PlayAction {
+    }
+
     record ArcherTarget(String archerId, int targetSlot) implements PlayAction {
     }
 

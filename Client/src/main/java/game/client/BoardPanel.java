@@ -320,8 +320,9 @@ public class BoardPanel extends JPanel {
 
     /*
      * A drop is resolved in this order: a unit under the cursor means a
-     * spell cast; an empty own front zone means a unit placement; an empty
-     * own back zone means a trap placement; anything else only works for an
+     * spell cast, or a rider attach if a unit is dropped on one of your own
+     * units; an empty own front zone means a unit placement; an empty own
+     * back zone means a trap placement; anything else only works for an
      * untargeted (SPECIAL) spell. Each branch also has to match what kind
      * of card is actually being dragged, or the drop is invalid.
      */
@@ -330,6 +331,9 @@ public class BoardPanel extends JPanel {
         if (targetUnit != null) {
             if (draggedCard instanceof ClientSpell spell) {
                 return new PlayAction.SpellCast(spell.id(), targetUnit.id());
+            }
+            if (draggedCard instanceof ClientUnit unit && isOwnUnit(targetUnit)) {
+                return new PlayAction.RiderAttach(unit.id(), targetUnit.id());
             }
             return null;
         }
@@ -386,6 +390,15 @@ public class BoardPanel extends JPanel {
             }
         }
         return null;
+    }
+
+    private boolean isOwnUnit(ClientUnit unit) {
+        for (ClientUnit own : ownFront) {
+            if (own.id().equals(unit.id())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private Integer findEmptyOwnFrontZone(int x, int y) {

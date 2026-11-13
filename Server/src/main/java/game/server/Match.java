@@ -6,6 +6,7 @@ import game.server.cards.SpellType;
 import game.server.cards.Trap;
 import game.server.cards.Unit;
 import game.server.cards.UnitBuff;
+import game.server.cards.UnitContainer;
 
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -200,6 +201,28 @@ public class Match {
         if (spell.getSpellType() != SpellType.BUFF) {
             player.sendToGraveyard(spell);
         }
+
+        GameStatistics.getInstance().recordCardPlayed();
+        return true;
+    }
+
+    /*
+     * Attempts to attach a rider (see Jumpy) from hand to one of the
+     * player's own units. No new unit lands on a field, so unlike playUnit
+     * this isn't trap-relevant. Unit.attach decides what the zone holds
+     * afterwards: the first rider turns a plain unit into a UnitGroup, any
+     * later one just joins the group already there.
+     */
+    public synchronized boolean attachRider(Player player, String cardId, Unit targetUnit) {
+        PlayRequest request = PlayRequest.attachment(this, player, cardId, targetUnit);
+        if (!passesValidation(PlayValidationChains.RIDER_ATTACH, request)) {
+            return false;
+        }
+
+        Unit rider = (Unit) request.getCard();
+        player.spendEnergy(rider.getEnergyCost());
+        player.getHand().remove(rider);
+        replaceUnit(targetUnit, targetUnit.attach(rider));
 
         GameStatistics.getInstance().recordCardPlayed();
         return true;
@@ -409,7 +432,32 @@ public class Match {
             owner.sendToGraveyard(buff);
             current = buff.getWrapped();
         }
+
+        /*
+         * Design pattern note - Composite: under the buffs may be a
+         * UnitGroup. Its first child is the unit it carries, which is
+         * discarded like any other; the rest are riders, which go back to
+         * the hand instead. An empty child list means a leaf - that's how a
+         * plain unit answers in the transparent variant (see UnitContainer).
+         */
+        if (current instanceof UnitContainer group && !group.getChildren().isEmpty()) {
+            List<Unit> children = group.getChildren();
+            sendToGraveyardLayered(owner, children.get(0));
+            for (Unit rider : children.subList(1, children.size())) {
+                returnRiderToHand(owner, rider);
+            }
+            return;
+        }
+
         owner.sendToGraveyard(current);
+    }
+
+    /* A full hand has no room for it, so it's discarded instead - like a spawned spell. */
+    private void returnRiderToHand(Player owner, Unit rider) {
+        rider.reset();
+        if (!owner.addToHand(rider)) {
+            owner.sendToGraveyard(rider);
+        }
     }
 
     public Player ownerOf(Unit unit) {
@@ -619,7 +667,8 @@ public class Match {
      *   hand entry   - UNIT,id,name,cost,health,maxHealth,damage,element,clan,description
      *                  SPELL,id,name,cost,spellType,description
      *                  TRAP,id,name,cost,condition,description
-     *   front entry  - zoneIndex,id,name,cost,health,maxHealth,damage,element,clan
+     *   front entry  - zoneIndex,id,name,cost,health,maxHealth,damage,element,clan,
+     *                  healthBuffed,damageBuffed,shieldCount,riderCount
      *   own-back entry - zoneIndex,id,name,cost,condition,description (fully
      *                    revealed - it's the viewer's own trap)
      *
@@ -733,7 +782,8 @@ public class Match {
                     .append(",").append(unit.hasClan() ? unit.getClan() : "NONE")
                     .append(",").append(unit.isHealthBuffed() ? 1 : 0)
                     .append(",").append(unit.isDamageBuffed() ? 1 : 0)
-                    .append(",").append(unit.getShieldCount());
+                    .append(",").append(unit.getShieldCount())
+                    .append(",").append(unit.getRiderCount());
         }
 
         return result.isEmpty() ? "-" : result.toString();

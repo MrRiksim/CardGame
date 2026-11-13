@@ -252,7 +252,7 @@ public class GameClient extends WebSocketClient {
         for (String entry : data.split(";")) {
             String[] parts = entry.split(",");
 
-            if (parts.length != 12) {
+            if (parts.length != 13) {
                 continue;
             }
 
@@ -269,7 +269,8 @@ public class GameClient extends WebSocketClient {
                     Integer.parseInt(parts[0]),
                     parts[9].equals("1"),
                     parts[10].equals("1"),
-                    Integer.parseInt(parts[11])
+                    Integer.parseInt(parts[11]),
+                    Integer.parseInt(parts[12])
             ));
         }
         return units;
@@ -358,6 +359,13 @@ public class GameClient extends WebSocketClient {
             return;
         }
         send("PLAY_TRAP|" + cardId + "|" + zoneIndex);
+    }
+
+    public void attachRider(String cardId, String targetUnitId) {
+        if (!isOpen()) {
+            return;
+        }
+        send("ATTACH|" + cardId + "|" + targetUnitId);
     }
 
     public void endTurn() {

@@ -76,6 +76,21 @@ public class BoardPanel extends JPanel {
     private ClientCard opponentGraveyardTop;
 
     private int opponentHandCount = 0;
+
+    /*
+     * Spectator mode (see updateSpectatorState): player 1 is drawn where
+     * "you" normally are and player 2 where the opponent is. Whatever the
+     * server hid is drawn face-down, so these hold what can't fit in the
+     * normal player fields: a hidden bottom hand (its size, or -1 when not
+     * hidden), hidden bottom traps (occupied zones, or null), and a top hand
+     * or trap row the server did show (null when hidden, as usual).
+     */
+    private boolean spectating = false;
+    private int ownHandHiddenCount = -1;
+    private List<Integer> ownBackZonesHidden;
+    private List<ClientCard> opponentHandShown;
+    private List<ClientTrap> opponentBackShown;
+
     private boolean yourTurn = false;
     private boolean gameOver = false;
     private Map<Integer, Integer> archerTargets = new HashMap<>();
@@ -238,6 +253,7 @@ public class BoardPanel extends JPanel {
         this.opponentGraveyardTop = opponentGraveyardTop;
         this.yourTurn = yourTurn;
         this.archerTargets = new HashMap<>(archerTargets);
+        clearSpectatorView();
 
         /*
          * Deliberately NOT clearing draggedCard here. A timed match's
@@ -255,7 +271,47 @@ public class BoardPanel extends JPanel {
         repaint();
     }
 
+    /*
+     * A spectator never gets a turn, so nothing can be dragged and no Archer
+     * dialog opens - both already check yourTurn.
+     */
+    public void updateSpectatorState(SpectatorState state) {
+        spectating = true;
+        yourTurn = false;
+        draggedCard = null;
+        archerTargets = new HashMap<>();
+
+        ownFront = new ArrayList<>(state.player1Front());
+        opponentFront = new ArrayList<>(state.player2Front());
+        ownGraveyardTop = state.player1GraveyardTop();
+        opponentGraveyardTop = state.player2GraveyardTop();
+
+        boolean ownHandHidden = state.player1Hand() == null;
+        ownHand = ownHandHidden ? new ArrayList<>() : new ArrayList<>(state.player1Hand());
+        ownHandHiddenCount = ownHandHidden ? state.player1HandCount() : -1;
+
+        boolean ownTrapsHidden = state.player1Back() == null;
+        ownBack = ownTrapsHidden ? new ArrayList<>() : new ArrayList<>(state.player1Back());
+        ownBackZonesHidden = ownTrapsHidden ? new ArrayList<>(state.player1BackZones()) : null;
+
+        opponentHandCount = state.player2HandCount();
+        opponentHandShown = state.player2Hand() == null ? null : new ArrayList<>(state.player2Hand());
+        opponentBackZones = new ArrayList<>(state.player2BackZones());
+        opponentBackShown = state.player2Back() == null ? null : new ArrayList<>(state.player2Back());
+
+        repaint();
+    }
+
+    private void clearSpectatorView() {
+        spectating = false;
+        ownHandHiddenCount = -1;
+        ownBackZonesHidden = null;
+        opponentHandShown = null;
+        opponentBackShown = null;
+    }
+
     public void resetGame() {
+        clearSpectatorView();
         archerTargets.clear();
         ownHand = new ArrayList<>();
         ownFront = new ArrayList<>();
@@ -550,8 +606,8 @@ public class BoardPanel extends JPanel {
         graphics.drawLine(40, 400, BASE_WIDTH - 40, 400);
 
         graphics.setFont(new Font("Arial", Font.BOLD, 14));
-        graphics.drawString("OPPONENT", 10, 120);
-        graphics.drawString("YOU", 10, 770);
+        graphics.drawString(spectating ? "PLAYER 2" : "OPPONENT", 10, 120);
+        graphics.drawString(spectating ? "PLAYER 1" : "YOU", 10, 770);
     }
 
     private void drawZone(Graphics2D graphics, Rectangle rectangle, Color color) {
@@ -576,11 +632,20 @@ public class BoardPanel extends JPanel {
             Rectangle rectangle = getHandCardRectangle(
                     i, opponentHandCount, OPPONENT_HAND_CARD_WIDTH, OPPONENT_HAND_CARD_HEIGHT,
                     OPPONENT_HAND_GAP, OPPONENT_HAND_Y);
-            drawCardBack(graphics, rectangle);
+            if (opponentHandShown != null && i < opponentHandShown.size()) {
+                CardRenderer.draw(graphics, rectangle, opponentHandShown.get(i), false);
+            } else {
+                drawCardBack(graphics, rectangle);
+            }
         }
     }
 
     private void drawOwnHand(Graphics2D graphics) {
+        for (int i = 0; i < ownHandHiddenCount; i++) {
+            drawCardBack(graphics, getHandCardRectangle(
+                    i, ownHandHiddenCount, HAND_CARD_WIDTH, HAND_CARD_HEIGHT, HAND_GAP, PLAYER_HAND_Y));
+        }
+
         for (int i = 0; i < ownHand.size(); i++) {
             ClientCard card = ownHand.get(i);
 
@@ -616,6 +681,20 @@ public class BoardPanel extends JPanel {
         for (ClientTrap trap : ownBack) {
             Rectangle zone = getOwnZoneRectangle(trap.zoneIndex(), PLAYER_BACK_Y);
             CardRenderer.draw(graphics, getFieldCardRectangle(zone), trap, false);
+        }
+        if (ownBackZonesHidden != null) {
+            for (int zoneIndex : ownBackZonesHidden) {
+                Rectangle zone = getOwnZoneRectangle(zoneIndex, PLAYER_BACK_Y);
+                drawCardBack(graphics, getFieldCardRectangle(zone));
+            }
+        }
+
+        if (opponentBackShown != null) {
+            for (ClientTrap trap : opponentBackShown) {
+                Rectangle zone = getOpponentZoneRectangle(trap.zoneIndex(), OPPONENT_BACK_Y);
+                CardRenderer.draw(graphics, getFieldCardRectangle(zone), trap, false);
+            }
+            return;
         }
         for (int zoneIndex : opponentBackZones) {
             Rectangle zone = getOpponentZoneRectangle(zoneIndex, OPPONENT_BACK_Y);

@@ -71,6 +71,84 @@ public class GameClient extends WebSocketClient {
         }
         if (message.equals("YOU_LOSE")) {
             window.showLose();
+            return;
+        }
+
+        if (message.startsWith("MATCHES|")) {
+            handleMatchList(message);
+            return;
+        }
+        if (message.startsWith("SPECTATING|")) {
+            window.showSpectating(Integer.parseInt(message.substring("SPECTATING|".length())));
+            return;
+        }
+        if (message.equals("SPECTATE_REJECTED")) {
+            window.showSpectateRejected();
+            return;
+        }
+        if (message.startsWith("SPECTATE_STATE|")) {
+            handleSpectatorState(message);
+            return;
+        }
+        if (message.startsWith("MATCH_OVER|")) {
+            window.showMatchOver(Integer.parseInt(message.substring("MATCH_OVER|".length())));
+        }
+    }
+
+    /* MATCHES|id,MODE,turnNumber;...  or  MATCHES|- */
+    private void handleMatchList(String message) {
+        List<MatchListing> matches = new ArrayList<>();
+        String data = message.substring("MATCHES|".length());
+        if (!data.equals("-") && !data.isEmpty()) {
+            for (String entry : data.split(";")) {
+                String[] parts = entry.split(",");
+                if (parts.length == 3) {
+                    matches.add(new MatchListing(
+                            Integer.parseInt(parts[0]), parts[1], Integer.parseInt(parts[2])));
+                }
+            }
+        }
+        window.showMatchList(matches);
+    }
+
+    /*
+     * SPECTATE_STATE|matchId|turnPlayer|p1Health|p2Health|p1HandCount|p2HandCount|
+     *                p1Hand|p2Hand|p1Front|p2Front|p1Back|p2Back|p1BackZones|p2BackZones|
+     *                p1SecondsLeft|p2SecondsLeft|p1GraveyardTop|p2GraveyardTop
+     *
+     * A hand or back row of "?" was hidden by the server and becomes null.
+     * See SpectatorStatePacket (server) for the full format.
+     */
+    private void handleSpectatorState(String message) {
+        try {
+            String[] parts = message.split("\\|", -1);
+            if (parts.length != 19) {
+                return;
+            }
+
+            window.updateSpectator(new SpectatorState(
+                    Integer.parseInt(parts[1]),
+                    Integer.parseInt(parts[2]),
+                    Integer.parseInt(parts[3]),
+                    Integer.parseInt(parts[4]),
+                    Integer.parseInt(parts[5]),
+                    Integer.parseInt(parts[6]),
+                    parts[7].equals("?") ? null : parseHand(parts[7]),
+                    parts[8].equals("?") ? null : parseHand(parts[8]),
+                    parseFront(parts[9]),
+                    parseFront(parts[10]),
+                    parts[11].equals("?") ? null : parseOwnBack(parts[11]),
+                    parts[12].equals("?") ? null : parseOwnBack(parts[12]),
+                    parseZoneList(parts[13]),
+                    parseZoneList(parts[14]),
+                    parseSeconds(parts[15]),
+                    parseSeconds(parts[16]),
+                    parseGraveyardTop(parts[17]),
+                    parseGraveyardTop(parts[18])
+            ));
+        } catch (Exception e) {
+            System.err.println("Invalid SPECTATE_STATE message: " + message);
+            e.printStackTrace();
         }
     }
 
@@ -338,6 +416,20 @@ public class GameClient extends WebSocketClient {
             return;
         }
         send("JOIN|" + mode.name());
+    }
+
+    public void requestMatchList() {
+        if (!isOpen()) {
+            return;
+        }
+        send("LIST_MATCHES");
+    }
+
+    public void spectate(int matchId) {
+        if (!isOpen()) {
+            return;
+        }
+        send("SPECTATE|" + matchId);
     }
 
     public void playUnit(String cardId, int zoneIndex) {

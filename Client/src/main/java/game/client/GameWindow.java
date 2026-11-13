@@ -67,7 +67,7 @@ public class GameWindow {
     }
 
     private JPanel buildModeSelectPanel() {
-        JPanel panel = new JPanel(new GridLayout(3, 1, 12, 12));
+        JPanel panel = new JPanel(new GridLayout(4, 1, 12, 12));
         panel.setBorder(BorderFactory.createEmptyBorder(40, 60, 40, 60));
 
         panel.add(createModeButton(
@@ -83,7 +83,104 @@ public class GameWindow {
                 "Health, energy, hand size - and a 5 to 15 minute clock - are all randomized.",
                 GameMode.CHAOS));
 
+        JButton spectateButton = new JButton(
+                "<html><div style='text-align:center'><b style='font-size:14px'>Spectate a Match</b>"
+                        + "<br>Watch a match that's already being played. Hands and traps stay hidden.</div></html>");
+        spectateButton.addActionListener(e -> {
+            if (client != null) {
+                statusLabel.setText("Looking for matches...");
+                client.requestMatchList();
+            }
+        });
+        panel.add(spectateButton);
+
         return panel;
+    }
+
+    /* The server's answer to the Spectate button. Picking one swaps the menu for the board. */
+    public void showMatchList(List<MatchListing> matches) {
+        SwingUtilities.invokeLater(() -> {
+            if (matches.isEmpty()) {
+                statusLabel.setText("Choose a match type to begin.");
+                JOptionPane.showMessageDialog(frame, "No matches are being played right now.",
+                        "Spectate", JOptionPane.INFORMATION_MESSAGE);
+                return;
+            }
+
+            JComboBox<MatchListing> selector = new JComboBox<>(matches.toArray(new MatchListing[0]));
+            int choice = JOptionPane.showConfirmDialog(frame, new Object[]{"Choose a match to watch:", selector},
+                    "Spectate", JOptionPane.OK_CANCEL_OPTION, JOptionPane.QUESTION_MESSAGE);
+            MatchListing picked = (MatchListing) selector.getSelectedItem();
+            if (choice != JOptionPane.OK_OPTION || picked == null) {
+                statusLabel.setText("Choose a match type to begin.");
+                return;
+            }
+
+            frame.remove(modeSelectPanel);
+            frame.add(boardPanel, BorderLayout.CENTER);
+            statusLabel.setText("Joining Match " + picked.matchId() + "...");
+            client.spectate(picked.matchId());
+            frame.revalidate();
+            frame.repaint();
+        });
+    }
+
+    public void showSpectating(int matchId) {
+        SwingUtilities.invokeLater(() -> {
+            gameOver = false;
+            inMatch = false;
+            matchLabel.setText("Spectating Match " + matchId);
+            turnLabel.setText("Waiting for game state...");
+            statusLabel.setText("You are spectating - hands and traps are hidden.");
+            endTurnButton.setEnabled(false);
+            boardPanel.resetGame();
+            boardPanel.setVisible(true);
+            frame.revalidate();
+            frame.repaint();
+        });
+    }
+
+    /* The match ended (or never existed) before the server could add us - back to the menu. */
+    public void showSpectateRejected() {
+        SwingUtilities.invokeLater(() -> {
+            frame.remove(boardPanel);
+            frame.add(modeSelectPanel, BorderLayout.CENTER);
+            matchLabel.setText("");
+            turnLabel.setText("");
+            statsLabel.setText("");
+            statusLabel.setText("Choose a match type to begin.");
+            JOptionPane.showMessageDialog(frame, "That match can't be watched anymore.",
+                    "Spectate", JOptionPane.INFORMATION_MESSAGE);
+            frame.revalidate();
+            frame.repaint();
+        });
+    }
+
+    public void updateSpectator(SpectatorState state) {
+        SwingUtilities.invokeLater(() -> {
+            if (gameOver) {
+                return;
+            }
+            matchLabel.setText("Spectating Match " + state.matchId());
+            turnLabel.setText("PLAYER " + state.turnPlayer() + "'S TURN");
+            statsLabel.setText("Player 1: " + state.player1Health() + " HP" + formatClock(state.player1SecondsLeft())
+                    + "    |    Player 2: " + state.player2Health() + " HP" + formatClock(state.player2SecondsLeft()));
+            boardPanel.setVisible(true);
+            boardPanel.updateSpectatorState(state);
+            frame.revalidate();
+            frame.repaint();
+        });
+    }
+
+    public void showMatchOver(int winnerNumber) {
+        SwingUtilities.invokeLater(() -> {
+            gameOver = true;
+            boardPanel.setGameOver();
+            turnLabel.setText("PLAYER " + winnerNumber + " WINS");
+            statusLabel.setText("The match is over.");
+            frame.revalidate();
+            frame.repaint();
+        });
     }
 
     private JButton createModeButton(String title, String description, GameMode mode) {

@@ -7,6 +7,8 @@ import game.server.cards.Trap;
 import game.server.cards.Unit;
 import game.server.cards.UnitBuff;
 import game.server.cards.UnitContainer;
+import game.server.spectating.MatchSnapshot;
+import game.server.spectating.SideSnapshot;
 
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -56,6 +58,14 @@ public class Match {
 
     private final Map<String, Integer> archerTargets = new HashMap<>();
     private final List<MatchObserver> observers = new ArrayList<>();
+
+    /*
+     * Goes up by one after every successful action that can change what
+     * the match looks like (see stateChanged). Lets CachingStateProxy tell
+     * whether its cached snapshot is still current without capturing a new
+     * one to compare. The clocks aren't counted - they move on their own.
+     */
+    private long stateVersion = 0;
 
     public Match(int id, PlayerConnection connection1, PlayerConnection connection2, MatchSettings settings) {
         this.id = id;
@@ -162,6 +172,7 @@ public class Match {
 
         checkTraps(getOpponent(player), new GameEvent(GameEvent.Type.UNIT_PLAYED, player, unit));
         GameStatistics.getInstance().recordCardPlayed();
+        stateChanged();
         return true;
     }
 
@@ -203,6 +214,7 @@ public class Match {
         }
 
         GameStatistics.getInstance().recordCardPlayed();
+        stateChanged();
         return true;
     }
 
@@ -225,6 +237,7 @@ public class Match {
         replaceUnit(targetUnit, targetUnit.attach(rider));
 
         GameStatistics.getInstance().recordCardPlayed();
+        stateChanged();
         return true;
     }
 
@@ -260,7 +273,21 @@ public class Match {
         player.getHand().remove(trap);
         player.getBackZones()[zoneIndex] = trap;
         GameStatistics.getInstance().recordCardPlayed();
+        stateChanged();
         return true;
+    }
+
+    /*
+     * Every public action that changes the match calls this once it has
+     * succeeded. A new action that changes the board must call it too, or
+     * spectators behind CachingStateProxy keep seeing the old state.
+     */
+    private void stateChanged() {
+        stateVersion++;
+    }
+
+    public synchronized long getStateVersion() {
+        return stateVersion;
     }
 
     /*
@@ -288,6 +315,7 @@ public class Match {
         startTurnClock();
 
         archerTargets.clear();
+        stateChanged();
         return true;
     }
 
@@ -627,6 +655,7 @@ public class Match {
 
     public synchronized void endMatch() {
         active = false;
+        stateChanged();
     }
 
     public synchronized boolean isActive() {
@@ -697,6 +726,39 @@ public class Match {
                 + "|" + serializeGraveyardTop(viewer)
                 + "|" + serializeGraveyardTop(opponent)
                 + "|" + serializeArcherTargets(viewer);
+    }
+
+    /*
+     * Everything about the match at this moment, seen from neither player's
+     * side and with nothing hidden - both hands and every trap included.
+     * Only the real subject of the spectator proxies (LiveMatchState) calls
+     * this; HiddenInformationProxy is what removes the hidden parts before
+     * a spectator sees them. Archer targets are left out entirely: not even
+     * the opponent can see those.
+     */
+    public synchronized MatchSnapshot captureSnapshot() {
+        return new MatchSnapshot(id, getCurrentTurnPlayerNumber(),
+                captureSide(player1), captureSide(player2));
+    }
+
+    private SideSnapshot captureSide(Player player) {
+        return new SideSnapshot(
+                player.getHealth(),
+                player.getHand().size(),
+                serializeHand(player),
+                serializeFront(player.getFrontZones()),
+                serializeOwnBack(player.getBackZones()),
+                serializeOccupiedZones(player.getBackZones()),
+                serializeRemainingSeconds(player),
+                serializeGraveyardTop(player));
+    }
+
+    /* Whole seconds left on `player`'s clock right now, or -1 when this match has no clock. */
+    public synchronized int getSecondsLeft(Player player) {
+        if (!settings.hasTimer()) {
+            return -1;
+        }
+        return (int) Math.max(0, liveRemainingMillis(player) / 1000);
     }
 
     private String serializeArcherTargets(Player viewer) {
@@ -862,6 +924,7 @@ public class Match {
         } else {
             archerTargets.put(archer.getId(), targetSlot);
         }
+        stateChanged();
         return true;
     }
 

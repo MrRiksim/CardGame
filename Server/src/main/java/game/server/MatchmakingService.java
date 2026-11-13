@@ -16,6 +16,8 @@ import java.util.concurrent.TimeUnit;
 
 import game.server.commands.GameCommand;
 import game.server.commands.ChooseArcherTargetCommand;
+import game.server.spectating.MatchStateViews;
+import game.server.spectating.SpectatorRoom;
 import game.server.GameStatistics;
 
 public class MatchmakingService {
@@ -25,6 +27,10 @@ public class MatchmakingService {
     private final Map<PlayerConnection, MatchFacade> playerMatches = new HashMap<>();
     private final Map<Player, Deque<GameCommand>> archerCommandHistory = new HashMap<>();
     private final MatchSettingsDirector settingsDirector = new MatchSettingsDirector();
+
+    /* One room per active match (keyed by match id), and which room each spectator is in. */
+    private final Map<Integer, SpectatorRoom> spectatorRooms = new HashMap<>();
+    private final Map<PlayerConnection, SpectatorRoom> spectating = new HashMap<>();
 
     private int nextMatchId = 1;
 
@@ -58,6 +64,7 @@ public class MatchmakingService {
             activeMatches.put(matchId, matchFacade);
             playerMatches.put(opponent, matchFacade);
             playerMatches.put(connection, matchFacade);
+            spectatorRooms.put(matchId, new SpectatorRoom(matchId, mode, MatchStateViews.create(match)));
 
             opponent.send("MATCH:" + matchId + ":PLAYER1");
             connection.send("MATCH:" + matchId + ":PLAYER2");
@@ -85,6 +92,14 @@ public class MatchmakingService {
     public synchronized void handleMessage(PlayerConnection connection, String message) {
         if (message.startsWith("JOIN|")) {
             handleJoin(connection, message);
+            return;
+        }
+        if (message.equals("LIST_MATCHES")) {
+            connection.send(buildMatchList());
+            return;
+        }
+        if (message.startsWith("SPECTATE|")) {
+            handleSpectate(connection, message);
             return;
         }
 
@@ -190,6 +205,68 @@ public class MatchmakingService {
         addPlayer(connection, mode);
     }
 
+    /* MATCHES|id,MODE,turnNumber;... (or MATCHES|- when nothing is being played). */
+    private String buildMatchList() {
+        StringBuilder result = new StringBuilder();
+        for (SpectatorRoom room : spectatorRooms.values()) {
+            MatchFacade matchFacade = activeMatches.get(room.getMatchId());
+            if (matchFacade == null || !matchFacade.isActive()) {
+                continue;
+            }
+            if (!result.isEmpty()) {
+                result.append(";");
+            }
+            result.append(room.getMatchId()).append(",").append(room.getMode())
+                    .append(",").append(matchFacade.getTurnNumber());
+        }
+        return "MATCHES|" + (result.isEmpty() ? "-" : result.toString());
+    }
+
+    /*
+     * SPECTATE|matchId. Someone already playing, queued or spectating can't
+     * start watching; anyone else can watch any active match.
+     */
+    private void handleSpectate(PlayerConnection connection, String message) {
+        SpectatorRoom room = null;
+        try {
+            room = spectatorRooms.get(Integer.parseInt(message.substring("SPECTATE|".length())));
+        } catch (NumberFormatException e) {
+            System.out.println("Invalid spectate request: " + message);
+        }
+
+        boolean busy = playerMatches.containsKey(connection) || spectating.containsKey(connection)
+                || isQueued(connection);
+        if (room == null || busy) {
+            connection.send("SPECTATE_REJECTED");
+            return;
+        }
+
+        spectating.put(connection, room);
+        room.add(connection);
+        System.out.println("Spectator joined Match " + room.getMatchId() + ".");
+    }
+
+    private boolean isQueued(PlayerConnection connection) {
+        for (Queue<PlayerConnection> queue : waitingPlayers.values()) {
+            if (queue.contains(connection)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /* Tells the match's spectators who won and closes its room. */
+    private void closeSpectatorRoom(MatchFacade matchFacade, Player winner) {
+        SpectatorRoom room = spectatorRooms.remove(matchFacade.getId());
+        if (room == null) {
+            return;
+        }
+        for (PlayerConnection spectator : room.getSpectators()) {
+            spectating.remove(spectator);
+        }
+        room.endMatch(matchFacade.getPlayerNumber(winner));
+    }
+
     private void handlePlayUnit(Player player, MatchFacade matchFacade, String message) {
         try {
             String[] parts = message.split("\\|");
@@ -266,6 +343,10 @@ public class MatchmakingService {
     private void broadcastState(MatchFacade matchFacade) {
         matchFacade.notifyObservers();
 
+        SpectatorRoom room = spectatorRooms.get(matchFacade.getId());
+        if (room != null) {
+            room.broadcast();
+        }
     }
 
     private void checkForGameOver(MatchFacade matchFacade) {
@@ -279,6 +360,7 @@ public class MatchmakingService {
         defeated.send("YOU_LOSE");
 
         matchFacade.endMatch();
+        closeSpectatorRoom(matchFacade, winner);
         GameStatistics.getInstance().recordMatchCompleted();
         archerCommandHistory.remove(matchFacade.getPlayer1());
         archerCommandHistory.remove(matchFacade.getPlayer2());
@@ -307,6 +389,13 @@ public class MatchmakingService {
             }
         }
 
+        SpectatorRoom watchedRoom = spectating.remove(connection);
+        if (watchedRoom != null) {
+            watchedRoom.remove(connection);
+            System.out.println("Spectator left Match " + watchedRoom.getMatchId() + ".");
+            return;
+        }
+
         MatchFacade matchFacade = playerMatches.remove(connection);
         if (matchFacade == null) {
             return;
@@ -316,6 +405,7 @@ public class MatchmakingService {
         Player opponent = matchFacade.getOpponent(player);
 
         matchFacade.endMatch();
+        closeSpectatorRoom(matchFacade, opponent);
         archerCommandHistory.remove(matchFacade.getPlayer1());
         archerCommandHistory.remove(matchFacade.getPlayer2());
         matchFacade.removeObserver(connection);

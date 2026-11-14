@@ -1,21 +1,17 @@
 package game.server.validation;
 
-import game.server.cards.Card;
-
 /**
  * Concrete Handler - only cards in your own hand can be played. It also
- * stores the card it finds on the request, so every link after this one can
- * rely on {@link PlayRequest#getCard()} not being null.
+ * stores the card it finds on the request, so the links after it don't have
+ * to look it up again.
  */
 public class CardInHandHandler extends PlayValidationHandler {
 
     @Override
     public ValidationResult handle(PlayRequest request) {
-        Card card = request.getPlayer().findInHand(request.getCardId());
-        if (card == null) {
-            return ValidationResult.rejected("That card is not in the player's hand");
+        if (cardOf(request) == null) {
+            return notInHand();
         }
-        request.setCard(card);
         return passToNext(request);
     }
 }

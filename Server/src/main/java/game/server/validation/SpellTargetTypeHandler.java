@@ -2,6 +2,7 @@ package game.server.validation;
 
 import game.server.Match;
 import game.server.Player;
+import game.server.cards.Card;
 import game.server.cards.Spell;
 import game.server.cards.Unit;
 
@@ -13,7 +14,13 @@ public class SpellTargetTypeHandler extends PlayValidationHandler {
 
     @Override
     public ValidationResult handle(PlayRequest request) {
-        Spell spell = (Spell) request.getCard();
+        Card card = cardOf(request);
+        if (card == null) {
+            return notInHand();
+        }
+        if (!(card instanceof Spell spell)) {
+            return ValidationResult.rejected(card.getName() + " is not a Spell");
+        }
         Match match = request.getMatch();
         Player caster = request.getPlayer();
         Unit target = request.getTarget();

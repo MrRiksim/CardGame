@@ -17,10 +17,19 @@ public class ZoneFreeHandler extends PlayValidationHandler {
         this.row = row;
     }
 
+    /*
+     * Checks the index itself as well, rather than relying on a
+     * ZoneInRangeHandler earlier in the chain, so it's safe to run on its own.
+     */
     @Override
     public ValidationResult handle(PlayRequest request) {
-        if (row.apply(request.getPlayer())[request.getZoneIndex()] != null) {
-            return ValidationResult.rejected("Zone " + request.getZoneIndex() + " is already occupied");
+        Card[] zones = row.apply(request.getPlayer());
+        int zoneIndex = request.getZoneIndex();
+        if (zoneIndex < 0 || zoneIndex >= zones.length) {
+            return ValidationResult.rejected("There is no zone " + zoneIndex);
+        }
+        if (zones[zoneIndex] != null) {
+            return ValidationResult.rejected("Zone " + zoneIndex + " is already occupied");
         }
         return passToNext(request);
     }

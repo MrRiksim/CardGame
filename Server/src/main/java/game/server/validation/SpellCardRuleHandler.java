@@ -1,5 +1,6 @@
 package game.server.validation;
 
+import game.server.cards.Card;
 import game.server.cards.Spell;
 
 /**
@@ -10,7 +11,13 @@ public class SpellCardRuleHandler extends PlayValidationHandler {
 
     @Override
     public ValidationResult handle(PlayRequest request) {
-        Spell spell = (Spell) request.getCard();
+        Card card = cardOf(request);
+        if (card == null) {
+            return notInHand();
+        }
+        if (!(card instanceof Spell spell)) {
+            return ValidationResult.rejected(card.getName() + " is not a Spell");
+        }
         if (!spell.canTarget(request.getMatch(), request.getPlayer(), request.getTarget())) {
             return ValidationResult.rejected(spell.getName() + " can't be used on that target");
         }

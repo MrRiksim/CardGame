@@ -113,6 +113,16 @@ public class MatchmakingService {
             return;
         }
 
+        if (message.equals("UNDO_SPELL")) {
+            boolean undone = matchFacade.undoLastSpell(player);
+            connection.send(undone ? "SPELL_UNDO_OK" : "SPELL_UNDO_REJECTED");
+            if (undone) {
+                broadcastState(matchFacade);
+            }
+            System.out.println("Spell undo " + (undone ? "accepted." : "rejected."));
+            return;
+        }
+
         if (message.startsWith("ARCHER_TARGET|")) {
             String[] parts = message.split("\\|");
 

@@ -99,6 +99,14 @@ public class Player {
         return true;
     }
 
+    /**
+     * Restores energy to an exact previously saved value.
+     * Used by the Memento undo mechanism to roll back a spell's energy cost.
+     */
+    public void restoreEnergy(int amount) {
+        energy = amount;
+    }
+
     /*
      * Called at the start of this player's turn: gains this match's
      * energy-per-turn and a card draw.

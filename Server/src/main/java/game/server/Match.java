@@ -7,6 +7,8 @@ import game.server.cards.Trap;
 import game.server.cards.Unit;
 import game.server.cards.UnitBuff;
 import game.server.cards.UnitContainer;
+import game.server.memento.SpellMemento;
+import game.server.memento.SpellMementoHistory;
 import game.server.spectating.MatchSnapshot;
 import game.server.spectating.SideSnapshot;
 
@@ -66,6 +68,14 @@ public class Match {
      * one to compare. The clocks aren't counted - they move on their own.
      */
     private long stateVersion = 0;
+
+    /*
+     * Design pattern note – Memento (Caretaker reference): the history object
+     * is the Caretaker; Match is the Originator.  One stack per match –
+     * cleared at the end of every turn so undo is scoped to the current turn
+     * only.
+     */
+    private final SpellMementoHistory spellUndoHistory = new SpellMementoHistory();
 
     public Match(int id, PlayerConnection connection1, PlayerConnection connection2, MatchSettings settings) {
         this.id = id;
@@ -192,6 +202,16 @@ public class Match {
         player.getHand().remove(spell);
 
         /*
+         * Design pattern note – Memento (Originator): save a snapshot of
+         * everything this spell is about to change, but only for spells that
+         * support undo.  The Caretaker (SpellMementoHistory) holds it on the
+         * stack; Match restores it in undoLastSpell().
+         */
+        if (spell.isUndoable()) {
+            spellUndoHistory.push(createSpellMemento(player, spell, targetUnit));
+        }
+
+        /*
          * Strategy pattern in action: Match has no idea what this spell
          * actually does, it just runs the spell's own apply() logic.
          */
@@ -286,6 +306,152 @@ public class Match {
         stateVersion++;
     }
 
+    /*
+     * ==========================================================
+     * Memento – spell undo
+     * ==========================================================
+     */
+
+    /**
+     * Design pattern – Memento (Concrete Memento, Wide Interface).
+     *
+     * <p>Private inner class implementing the narrow {@link SpellMemento} interface.
+     * Because this class and its fields are strictly private to {@link Match},
+     * no other class in the application (including the Caretaker {@link SpellMementoHistory})
+     * can inspect, access, or modify the saved state. This guarantees secure data
+     * restoration ("saugus duomenų atstatymas").
+     */
+    private static final class MatchSpellMemento implements SpellMemento {
+        private final int casterEnergyBefore;
+        private final Spell spellCard;
+        private final int casterGraveyardSizeBefore;
+        private final Unit targetSnapshot;
+        private final int targetZoneIndex;
+        private final Player targetOwner;
+        private final int targetOwnerGraveyardSizeBefore;
+
+        private MatchSpellMemento(
+                int casterEnergyBefore,
+                Spell spellCard,
+                int casterGraveyardSizeBefore,
+                Unit targetSnapshot,
+                int targetZoneIndex,
+                Player targetOwner,
+                int targetOwnerGraveyardSizeBefore) {
+            this.casterEnergyBefore = casterEnergyBefore;
+            this.spellCard = spellCard;
+            this.casterGraveyardSizeBefore = casterGraveyardSizeBefore;
+            this.targetSnapshot = targetSnapshot;
+            this.targetZoneIndex = targetZoneIndex;
+            this.targetOwner = targetOwner;
+            this.targetOwnerGraveyardSizeBefore = targetOwnerGraveyardSizeBefore;
+        }
+    }
+
+    /**
+     * Design pattern – Memento (Originator, snapshot creation).
+     *
+     * <p>Called just before a spell is cast. Captures:
+     * <ul>
+     *   <li>the caster's energy <em>before</em> paying the cost</li>
+     *   <li>the spell card to put back in hand</li>
+     *   <li>the caster's graveyard tail position</li>
+     *   <li>a deep-copy of the target unit's current state (null for untargeted spells)</li>
+     *   <li>the target unit's zone and owner, plus target owner's graveyard size</li>
+     * </ul>
+     */
+    private SpellMemento createSpellMemento(Player caster, Spell spell, Unit target) {
+        // Energy was already spent when this helper is called; add it back to get "before".
+        int energyBefore = caster.getEnergy() + spell.getEnergyCost();
+
+        Unit snapshot = null;
+        int zoneIndex = -1;
+        Player targetOwner = null;
+        int targetOwnerGraveyardBefore = 0;
+
+        if (target != null) {
+            targetOwner = ownerOf(target);
+            if (targetOwner != null) {
+                targetOwnerGraveyardBefore = targetOwner.getGraveyard().size();
+                Unit[] zones = targetOwner.getFrontZones();
+                for (int i = 0; i < zones.length; i++) {
+                    if (zones[i] == target) {
+                        zoneIndex = i;
+                        break;
+                    }
+                }
+            }
+            snapshot = target.cloneDeep();
+        }
+
+        return new MatchSpellMemento(
+                energyBefore,
+                spell,
+                caster.getGraveyard().size(),
+                snapshot,
+                zoneIndex,
+                targetOwner,
+                targetOwnerGraveyardBefore
+        );
+    }
+
+    /**
+     * Design pattern – Memento (Originator, state restore).
+     *
+     * <p>Pops the most recent spell memento and reverses every change that
+     * spell made:
+     * <ol>
+     *   <li>Energy is restored to its pre-cast value.</li>
+     *   <li>The spell card is removed from the graveyard tail and placed back
+     *       in the caster's hand.</li>
+     *   <li>If the target unit was damaged, killed, or buffed, any cards sent to
+     *       target owner's graveyard (like the dead unit or stripped buffs) are
+     *       removed and the unit's pre-cast state is restored in its zone.</li>
+     * </ol>
+     *
+     * <p>Only one undo is allowed per turn; the history is cleared by
+     * {@link #endTurn} at the end of every turn.
+     *
+     * @return {@code true} if the undo succeeded
+     */
+    public synchronized boolean undoLastSpell(Player player) {
+        if (!active || currentTurn != player) {
+            return false;
+        }
+
+        SpellMemento rawMemento = spellUndoHistory.pop();
+        if (!(rawMemento instanceof MatchSpellMemento memento)) {
+            return false;
+        }
+
+        // 1. Restore caster energy.
+        player.restoreEnergy(memento.casterEnergyBefore);
+
+        // 2. Remove the spell from the graveyard tail and return it to hand.
+        List<Card> casterGraveyard = player.getGraveyard();
+        while (casterGraveyard.size() > memento.casterGraveyardSizeBefore) {
+            casterGraveyard.remove(casterGraveyard.size() - 1);
+        }
+        player.getHand().add(memento.spellCard);
+
+        // 3. Restore the target unit's pre-cast state and revive if killed.
+        if (memento.targetOwner != null && memento.targetZoneIndex >= 0) {
+            List<Card> targetGraveyard = memento.targetOwner.getGraveyard();
+            while (targetGraveyard.size() > memento.targetOwnerGraveyardSizeBefore) {
+                targetGraveyard.remove(targetGraveyard.size() - 1);
+            }
+            memento.targetOwner.getFrontZones()[memento.targetZoneIndex] = memento.targetSnapshot;
+        }
+
+        stateChanged();
+        return true;
+    }
+
+    /** Whether the current player has a spell they can undo this turn. */
+    public synchronized boolean canUndoSpell(Player player) {
+        return active && currentTurn == player && spellUndoHistory.hasUndo();
+    }
+
     public synchronized long getStateVersion() {
         return stateVersion;
     }
@@ -315,6 +481,7 @@ public class Match {
         startTurnClock();
 
         archerTargets.clear();
+        spellUndoHistory.clear();   // undo is scoped to the current turn only
         stateChanged();
         return true;
     }

@@ -1,6 +1,5 @@
 package game.client;
 
-import javax.imageio.ImageIO;
 import java.awt.Color;
 import java.awt.Font;
 import java.awt.FontMetrics;
@@ -8,12 +7,8 @@ import java.awt.Graphics2D;
 import java.awt.Polygon;
 import java.awt.Rectangle;
 import java.awt.image.BufferedImage;
-import java.io.File;
-import java.io.IOException;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 /**
  * Draws a single card the same way everywhere it appears (hand, dragged,
@@ -44,9 +39,13 @@ public final class CardRenderer {
      * Card art doesn't exist yet in a fresh checkout (the assets/ folder is
      * the user's to fill in), so a missing file falls back to a flat color
      * instead of crashing - the board stays usable before any art lands.
+     *
+     * Design pattern note – Flyweight: image loading is delegated entirely to
+     * CardImageFlyweightFactory, which guarantees that each asset path maps to
+     * exactly one shared BufferedImage instance loaded from disk only once.
+     * The extrinsic state (draw position and size) is supplied by the caller
+     * via the Graphics2D and Rectangle arguments, never stored in the factory.
      */
-    private static final Map<String, BufferedImage> IMAGE_CACHE = new HashMap<>();
-
     private CardRenderer() {
     }
 
@@ -116,22 +115,7 @@ public final class CardRenderer {
     }
 
     private static BufferedImage loadImage(String path) {
-        if (IMAGE_CACHE.containsKey(path)) {
-            return IMAGE_CACHE.get(path);
-        }
-
-        BufferedImage image = null;
-        File file = new File(path);
-        if (file.exists()) {
-            try {
-                image = ImageIO.read(file);
-            } catch (IOException e) {
-                image = null;
-            }
-        }
-
-        IMAGE_CACHE.put(path, image);
-        return image;
+        return CardImageFlyweightFactory.get(path);
     }
 
     private static void drawTextArea(

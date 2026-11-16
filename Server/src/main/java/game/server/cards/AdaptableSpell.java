@@ -26,6 +26,16 @@ public class AdaptableSpell extends Spell {
         }
     }
 
+    /*
+     * Memento note: the adaptable spell can resurrect a unit or draw cards
+     * depending on its target zone, making a clean rollback impossible with
+     * a simple per-spell snapshot.  Opts out of undo.
+     */
+    @Override
+    public boolean isUndoable() {
+        return false;
+    }
+
     @Override
     public boolean canTarget(Match match, Player caster, Unit target) {
         // If a unit target is provided, it's valid (ally or enemy unit)

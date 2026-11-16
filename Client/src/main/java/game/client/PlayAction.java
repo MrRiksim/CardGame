@@ -33,4 +33,7 @@ public sealed interface PlayAction {
 
     record UndoArcherTarget() implements PlayAction {
     }
+
+    record UndoSpell() implements PlayAction {
+    }
 }

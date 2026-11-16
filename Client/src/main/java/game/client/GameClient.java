@@ -53,6 +53,15 @@ public class GameClient extends WebSocketClient {
             return;
         }
 
+        if (message.equals("SPELL_UNDO_OK")) {
+            window.showArcherCommandStatus("Last spell undone.");
+            return;
+        }
+        if (message.equals("SPELL_UNDO_REJECTED")) {
+            window.showArcherCommandStatus("No spell can be undone.");
+            return;
+        }
+
         if (message.equals("WAITING")) {
             window.setWaiting();
             return;
@@ -498,6 +507,12 @@ public class GameClient extends WebSocketClient {
     public void undoArcherTarget() {
         if (isOpen()) {
             send("UNDO_ARCHER_TARGET");
+        }
+    }
+
+    public void undoSpell() {
+        if (isOpen()) {
+            send("UNDO_SPELL");
         }
     }
 

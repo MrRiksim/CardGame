@@ -13,6 +13,7 @@ public class GameWindow {
     private final JLabel statsLabel;
     private final JLabel statusLabel;
     private final JButton endTurnButton;
+    private final JButton undoSpellButton;
     private final JPanel modeSelectPanel;
     private final BoardPanel boardPanel;
 
@@ -56,7 +57,16 @@ public class GameWindow {
             }
         });
 
+        undoSpellButton = new JButton("Undo Spell");
+        undoSpellButton.setEnabled(false);
+        undoSpellButton.addActionListener(e -> {
+            if (client != null && !gameOver) {
+                client.undoSpell();
+            }
+        });
+
         JPanel bottomPanel = new JPanel();
+        bottomPanel.add(undoSpellButton);
         bottomPanel.add(endTurnButton);
 
         frame.setLayout(new BorderLayout());
@@ -133,6 +143,7 @@ public class GameWindow {
             turnLabel.setText("Waiting for game state...");
             statusLabel.setText("You are spectating - hands and traps are hidden.");
             endTurnButton.setEnabled(false);
+            undoSpellButton.setEnabled(false);
             boardPanel.resetGame();
             boardPanel.setVisible(true);
             frame.revalidate();
@@ -228,6 +239,7 @@ public class GameWindow {
             statsLabel.setText("");
             statusLabel.setText("Waiting for opponent");
             endTurnButton.setEnabled(false);
+            undoSpellButton.setEnabled(false);
             boardPanel.resetGame();
             boardPanel.setVisible(false);
             frame.revalidate();
@@ -285,10 +297,12 @@ public class GameWindow {
                 turnLabel.setText("YOUR TURN");
                 statusLabel.setText("Play cards, then end your turn");
                 endTurnButton.setEnabled(true);
+                undoSpellButton.setEnabled(true);
             } else {
                 turnLabel.setText("OPPONENT'S TURN");
                 statusLabel.setText("Waiting for opponent...");
                 endTurnButton.setEnabled(false);
+                undoSpellButton.setEnabled(false);
             }
 
             frame.revalidate();
@@ -325,6 +339,7 @@ public class GameWindow {
             turnLabel.setText("YOU WIN");
             statusLabel.setText("Your opponent has been defeated.");
             endTurnButton.setEnabled(false);
+            undoSpellButton.setEnabled(false);
             frame.revalidate();
             frame.repaint();
         });
@@ -338,6 +353,7 @@ public class GameWindow {
             turnLabel.setText("YOU LOSE");
             statusLabel.setText("Your health - or your clock - reached zero.");
             endTurnButton.setEnabled(false);
+            undoSpellButton.setEnabled(false);
             frame.revalidate();
             frame.repaint();
         });
@@ -351,6 +367,7 @@ public class GameWindow {
             statsLabel.setText("");
             statusLabel.setText("Can't connect to server");
             endTurnButton.setEnabled(false);
+            undoSpellButton.setEnabled(false);
             boardPanel.setVisible(false);
             frame.revalidate();
             frame.repaint();
@@ -365,6 +382,7 @@ public class GameWindow {
             statsLabel.setText("");
             statusLabel.setText("Disconnected from server");
             endTurnButton.setEnabled(false);
+            undoSpellButton.setEnabled(false);
             boardPanel.setVisible(false);
             frame.revalidate();
             frame.repaint();
@@ -388,6 +406,8 @@ public class GameWindow {
             client.chooseArcherTarget(target.archerId(), target.targetSlot());
         } else if (action instanceof PlayAction.UndoArcherTarget) {
             client.undoArcherTarget();
+        } else if (action instanceof PlayAction.UndoSpell) {
+            client.undoSpell();
         }
     }
 

@@ -37,4 +37,15 @@ public abstract class Spell extends Card {
     public boolean canTarget(Match match, Player caster, Unit target) {
         return true;
     }
+
+    /**
+     * Design pattern note – Memento: returns whether this spell can be
+     * undone after casting.  Most spells are undoable (default {@code true}).
+     * Spells that place new units on the field or add cards to a hand as a
+     * side-effect override this to {@code false}, because those side-effects
+     * are too complex to fully roll back without a whole-match snapshot.
+     */
+    public boolean isUndoable() {
+        return true;
+    }
 }

@@ -30,6 +30,18 @@ public class MatchFacade {
         return match.endTurn(player);
     }
 
+    /**
+     * Design pattern – Memento: delegates the undo request to the Match
+     * (Originator).  The Caretaker (SpellMementoHistory) is internal to Match.
+     */
+    public synchronized boolean undoLastSpell(Player player) {
+        return match.undoLastSpell(player);
+    }
+
+    public synchronized boolean canUndoSpell(Player player) {
+        return match.canUndoSpell(player);
+    }
+
     public synchronized boolean chooseArcherTarget(Player player, String archerId, int targetSlot) {
         return match.chooseArcherTarget(player, archerId, targetSlot);
     }

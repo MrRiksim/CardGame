@@ -21,14 +21,12 @@ public class CrippleSpell extends Spell {
     }
 
     /*
-     * SpellType.SPECIAL on its own would allow any target (or none), so
-     * the real rules live here: an enemy unit that actually has a buff on
-     * it - which is exactly "is a UnitBuff", since a unit with no buffs is
-     * the plain base unit. Checked before any energy is spent.
+     * Design pattern note – State: Cripple can only target an enemy unit whose
+     * current combat state is BUFFED (enforced via target.getState().canCripple()).
      */
     @Override
     public boolean canTarget(Match match, Player caster, Unit target) {
-        return target instanceof UnitBuff && match.isEnemyUnit(caster, target);
+        return target != null && match.isEnemyUnit(caster, target) && target.getState().canCripple();
     }
 
     @Override

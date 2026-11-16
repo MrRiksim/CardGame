@@ -37,16 +37,6 @@ public class EssenceReplicationSpell extends Spell {
         caster.getHand().add(deepCopiedUnit);
     }
 
-    /*
-     * Memento note: adds a card to the caster's hand as a side-effect;
-     * rolling that back cleanly is out of scope for the spell memento, so
-     * this spell opts out of undo.
-     */
-    @Override
-    public boolean isUndoable() {
-        return false;
-    }
-
     public static Card create() {
         return new EssenceReplicationSpell();
     }

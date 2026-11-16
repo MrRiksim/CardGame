@@ -71,16 +71,6 @@ public class PhantomMirrorSpell extends Spell {
         match.placeUnitForFree(caster, mirroredIndex, shallowIllusion);
     }
 
-    /*
-     * Memento note: places a unit illusion on the field as a side-effect;
-     * rolling that back fully would require a whole-field snapshot, so this
-     * spell opts out of the undo mechanism.
-     */
-    @Override
-    public boolean isUndoable() {
-        return false;
-    }
-
     public static Card create() {
         return new PhantomMirrorSpell();
     }

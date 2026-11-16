@@ -1,6 +1,12 @@
 package game.server.cards;
 import game.server.Match;
 import game.server.Player;
+import game.server.cards.state.BuffedState;
+import game.server.cards.state.DeadState;
+import game.server.cards.state.InjuredState;
+import game.server.cards.state.NormalState;
+import game.server.cards.state.UnitState;
+import game.server.cards.state.UnitStateKind;
 import java.util.List;
 
 /**
@@ -54,6 +60,54 @@ public abstract class Unit extends Card {
         this.damage = damage;
         this.element = element;
         this.clan = clan;
+
+        if (health <= 0) {
+            this.state = new DeadState();
+        } else if (health < maxHealth) {
+            this.state = new InjuredState();
+        } else {
+            this.state = new NormalState();
+        }
+    }
+
+    /*
+     * Design pattern note – State: tracks the current combat state of the unit
+     * (Normal, Injured, Buffed, or Dead). State transitions are handled by the
+     * states themselves or dynamically reflected when buffs are wrapped.
+     */
+    private UnitState state;
+
+    public void setInternalHealth(int health) {
+        this.health = health;
+    }
+
+    public UnitState getState() {
+        if (isDead()) {
+            if (!(state instanceof DeadState)) {
+                state = new DeadState();
+            }
+            return state;
+        }
+        if (isHealthBuffed() || isDamageBuffed() || getShieldCount() > 0 || this instanceof UnitBuff) {
+            if (!(state instanceof BuffedState)) {
+                state = new BuffedState();
+            }
+            return state;
+        }
+        if (getHealth() < getMaxHealth()) {
+            if (!(state instanceof InjuredState)) {
+                state = new InjuredState();
+            }
+            return state;
+        }
+        if (!(state instanceof NormalState)) {
+            state = new NormalState();
+        }
+        return state;
+    }
+
+    public void setState(UnitState state) {
+        this.state = state;
     }
 
     public abstract Unit cloneShallow();
@@ -85,15 +139,15 @@ public abstract class Unit extends Card {
     }
 
     public void takeDamage(int amount) {
-        health = Math.max(0, health - amount);
+        getState().takeDamage(this, amount);
     }
 
     public void heal(int amount) {
-        health = Math.min(maxHealth, health + amount);
+        getState().heal(this, amount);
     }
 
     public boolean isDead() {
-        return health <= 0;
+        return getHealth() <= 0;
     }
 
     /*
@@ -161,6 +215,7 @@ public abstract class Unit extends Card {
      */
     public void reset() {
         health = maxHealth;
+        state = new NormalState();
     }
 
     @Override

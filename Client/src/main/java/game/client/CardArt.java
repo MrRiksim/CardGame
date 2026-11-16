@@ -26,7 +26,8 @@ public final class CardArt {
             Map.entry("Shield", "shield.png"),
             Map.entry("Phantom Mirror", "Phantom_Mirror_Spell.png"),
             Map.entry("Essence Replication", "Essence_Replication_Spell.png"),
-            Map.entry("Jumpy", "jumpy.png")
+            Map.entry("Jumpy", "jumpy.png"),
+            Map.entry("Heal", "health_boost.png")
     );
 
     private CardArt() {

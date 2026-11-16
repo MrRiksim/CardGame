@@ -44,6 +44,7 @@ public class CardFactory {
             Tombstone::create,
             ShieldSpell::create,
             CrippleSpell::create,
+            HealSpell::create,
             Hunter::create,
             Brewer::create,
             Jumpy::create,

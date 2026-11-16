@@ -19,4 +19,9 @@ public record ClientTrap(
     public CardKind kind() {
         return CardKind.TRAP;
     }
+
+    @Override
+    public void accept(ClientCardVisitor visitor) {
+        visitor.visitTrap(this);
+    }
 }

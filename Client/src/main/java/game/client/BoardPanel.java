@@ -8,9 +8,11 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.function.Consumer;
 
-public class BoardPanel extends JPanel {
+public class BoardPanel extends UiColleague {
 
     /*
      * All of the geometry in this class is expressed in a fixed "design"
@@ -101,6 +103,8 @@ public class BoardPanel extends JPanel {
     private ClientCard draggedCard;
     private int mouseX;
     private int mouseY;
+    private boolean didDrag = false;
+    private Set<ZoneRef> highlightedZones = new HashSet<>();
 
     private final Consumer<PlayAction> playListener;
 
@@ -120,6 +124,8 @@ public class BoardPanel extends JPanel {
                 Point board = toBoardPoint(e.getX(), e.getY());
 
 
+                didDrag = false;
+                handleCardSelection(board.x, board.y);
                 if (handleArcherClick(board.x, board.y)) {
                     return;
                 }
@@ -133,6 +139,7 @@ public class BoardPanel extends JPanel {
                     return;
                 }
                 Point board = toBoardPoint(e.getX(), e.getY());
+                didDrag = true;
                 mouseX = board.x;
                 mouseY = board.y;
                 repaint();
@@ -268,6 +275,9 @@ public class BoardPanel extends JPanel {
          * every state update rebuilds fresh card objects even when
          * nothing changed.
          */
+        if (mediator != null) {
+            mediator.notify(this, UiEvent.STATE_UPDATED, null);
+        }
         repaint();
     }
 
@@ -299,6 +309,9 @@ public class BoardPanel extends JPanel {
         opponentBackZones = new ArrayList<>(state.player2BackZones());
         opponentBackShown = state.player2Back() == null ? null : new ArrayList<>(state.player2Back());
 
+        if (mediator != null) {
+            mediator.notify(this, UiEvent.STATE_UPDATED, null);
+        }
         repaint();
     }
 
@@ -365,11 +378,14 @@ public class BoardPanel extends JPanel {
             return;
         }
 
-        PlayAction action = resolveAction(x, y);
-        if (action != null) {
-            playListener.accept(action);
+        if (didDrag) {
+            PlayAction action = resolveAction(x, y);
+            if (action != null) {
+                playListener.accept(action);
+            }
         }
 
+        didDrag = false;
         draggedCard = null;
         repaint();
     }
@@ -527,10 +543,11 @@ public class BoardPanel extends JPanel {
         drawFrontZones(graphics);
         drawBackZones(graphics);
         drawGraveyards(graphics);
+        drawHighlightedZones(graphics);
         drawArcherTargets(graphics);
 
 
-        if (draggedCard != null) {
+        if (draggedCard != null && didDrag) {
             Rectangle rectangle = new Rectangle(
                     mouseX - HAND_CARD_WIDTH / 2, mouseY - HAND_CARD_HEIGHT / 2,
                     HAND_CARD_WIDTH, HAND_CARD_HEIGHT);
@@ -656,7 +673,7 @@ public class BoardPanel extends JPanel {
              * so draggedCard (captured back in startDragging) is never
              * literally the same object as anything in a later ownHand.
              */
-            if (draggedCard != null && card.id().equals(draggedCard.id())) {
+            if (draggedCard != null && didDrag && card.id().equals(draggedCard.id())) {
                 continue;
             }
 
@@ -763,5 +780,182 @@ public class BoardPanel extends JPanel {
         int totalWidth = count * cardWidth + Math.max(0, count - 1) * gap;
         int startX = (BASE_WIDTH - totalWidth) / 2;
         return new Rectangle(startX + index * (cardWidth + gap), y, cardWidth, cardHeight);
+    }
+
+    /*
+     * ==========================================================
+     * Mediator & Visitor support (Card selection & zone highlights)
+     * ==========================================================
+     */
+
+    public void highlight(Set<ZoneRef> zones) {
+        this.highlightedZones = zones == null ? new HashSet<>() : new HashSet<>(zones);
+        repaint();
+    }
+
+    public void clearHighlight() {
+        if (!this.highlightedZones.isEmpty()) {
+            this.highlightedZones.clear();
+            repaint();
+        }
+    }
+
+    public boolean isYourTurn() {
+        return yourTurn && !gameOver;
+    }
+
+    public List<ClientUnit> getOwnFront() {
+        return ownFront;
+    }
+
+    public List<ClientUnit> getOpponentFront() {
+        return opponentFront;
+    }
+
+    public List<ClientTrap> getOwnBack() {
+        return ownBack;
+    }
+
+    public boolean isInOwnHand(String cardId) {
+        for (ClientCard card : ownHand) {
+            if (card.id().equals(cardId)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public ClientCard findCardById(String cardId) {
+        if (cardId == null) {
+            return null;
+        }
+        for (ClientCard c : ownHand) {
+            if (c.id().equals(cardId)) {
+                return c;
+            }
+        }
+        for (ClientUnit u : ownFront) {
+            if (u.id().equals(cardId)) {
+                return u;
+            }
+        }
+        for (ClientUnit u : opponentFront) {
+            if (u.id().equals(cardId)) {
+                return u;
+            }
+        }
+        for (ClientTrap t : ownBack) {
+            if (t.id().equals(cardId)) {
+                return t;
+            }
+        }
+        if (opponentHandShown != null) {
+            for (ClientCard c : opponentHandShown) {
+                if (c.id().equals(cardId)) {
+                    return c;
+                }
+            }
+        }
+        if (opponentBackShown != null) {
+            for (ClientTrap t : opponentBackShown) {
+                if (t.id().equals(cardId)) {
+                    return t;
+                }
+            }
+        }
+        if (ownGraveyardTop != null && ownGraveyardTop.id().equals(cardId)) {
+            return ownGraveyardTop;
+        }
+        if (opponentGraveyardTop != null && opponentGraveyardTop.id().equals(cardId)) {
+            return opponentGraveyardTop;
+        }
+        return null;
+    }
+
+    private void handleCardSelection(int x, int y) {
+        if (mediator == null) {
+            return;
+        }
+        ClientCard clicked = findAnyCardAt(x, y);
+        if (clicked != null) {
+            mediator.notify(this, UiEvent.CARD_SELECTED, clicked);
+        } else {
+            mediator.notify(this, UiEvent.SELECTION_CLEARED, null);
+        }
+    }
+
+    private ClientCard findAnyCardAt(int x, int y) {
+        for (int i = 0; i < ownHand.size(); i++) {
+            Rectangle rect = getHandCardRectangle(
+                    i, ownHand.size(), HAND_CARD_WIDTH, HAND_CARD_HEIGHT, HAND_GAP, PLAYER_HAND_Y);
+            if (rect.contains(x, y)) {
+                return ownHand.get(i);
+            }
+        }
+        if (opponentHandShown != null) {
+            for (int i = 0; i < opponentHandShown.size(); i++) {
+                Rectangle rect = getHandCardRectangle(
+                        i, opponentHandShown.size(), OPPONENT_HAND_CARD_WIDTH,
+                        OPPONENT_HAND_CARD_HEIGHT, OPPONENT_HAND_GAP, OPPONENT_HAND_Y);
+                if (rect.contains(x, y)) {
+                    return opponentHandShown.get(i);
+                }
+            }
+        }
+        ClientUnit unit = findUnitAt(x, y);
+        if (unit != null) {
+            return unit;
+        }
+        for (ClientTrap trap : ownBack) {
+            Rectangle zone = getOwnZoneRectangle(trap.zoneIndex(), PLAYER_BACK_Y);
+            if (getFieldCardRectangle(zone).contains(x, y)) {
+                return trap;
+            }
+        }
+        if (opponentBackShown != null) {
+            for (ClientTrap trap : opponentBackShown) {
+                Rectangle zone = getOpponentZoneRectangle(trap.zoneIndex(), OPPONENT_BACK_Y);
+                if (getFieldCardRectangle(zone).contains(x, y)) {
+                    return trap;
+                }
+            }
+        }
+        if (ownGraveyardTop != null
+                && getPlayerUtilityRectangle(PLAYER_FRONT_Y).contains(x, y)) {
+            return ownGraveyardTop;
+        }
+        if (opponentGraveyardTop != null
+                && getOpponentUtilityRectangle(OPPONENT_FRONT_Y).contains(x, y)) {
+            return opponentGraveyardTop;
+        }
+        return null;
+    }
+
+    private void drawHighlightedZones(Graphics2D graphics) {
+        if (highlightedZones.isEmpty()) {
+            return;
+        }
+        Graphics2D g2 = (Graphics2D) graphics.create();
+        g2.setColor(new Color(40, 195, 70, 55));
+        Color borderColor = new Color(30, 175, 55);
+        Stroke borderStroke = new BasicStroke(3f);
+
+        for (ZoneRef ref : highlightedZones) {
+            Rectangle rect = switch (ref.row()) {
+                case OWN_FRONT -> getOwnZoneRectangle(ref.index(), PLAYER_FRONT_Y);
+                case OWN_BACK -> getOwnZoneRectangle(ref.index(), PLAYER_BACK_Y);
+                case OPPONENT_FRONT -> getOpponentZoneRectangle(ref.index(), OPPONENT_FRONT_Y);
+                case OWN_UTILITY -> getPlayerUtilityRectangle(
+                        ref.index() == 0 ? PLAYER_FRONT_Y : PLAYER_BACK_Y);
+                case OPPONENT_UTILITY -> getOpponentUtilityRectangle(
+                        ref.index() == 0 ? OPPONENT_FRONT_Y : OPPONENT_BACK_Y);
+            };
+            g2.setColor(new Color(40, 195, 70, 45));
+            g2.fill(rect);
+            g2.setColor(borderColor);
+            g2.setStroke(borderStroke);
+            g2.draw(rect);
+        }
+        g2.dispose();
     }
 }

@@ -15,4 +15,9 @@ public record ClientSpell(
     public CardKind kind() {
         return CardKind.SPELL;
     }
+
+    @Override
+    public void accept(ClientCardVisitor visitor) {
+        visitor.visitSpell(this);
+    }
 }

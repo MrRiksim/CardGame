@@ -18,4 +18,10 @@ public interface ClientCard {
     String description();
 
     CardKind kind();
+
+    /*
+     * Design pattern - Visitor (Element): each concrete card calls back the
+     * visitor method for its own type - see ClientCardVisitor.
+     */
+    void accept(ClientCardVisitor visitor);
 }

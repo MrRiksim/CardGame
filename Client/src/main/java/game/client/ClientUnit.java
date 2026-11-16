@@ -35,6 +35,11 @@ public record ClientUnit(
         return CardKind.UNIT;
     }
 
+    @Override
+    public void accept(ClientCardVisitor visitor) {
+        visitor.visitUnit(this);
+    }
+
     public boolean hasClan() {
         return clan != null && !clan.equals("NONE");
     }

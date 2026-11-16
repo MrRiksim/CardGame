@@ -8,14 +8,13 @@ import java.util.Map;
 public class GameWindow {
 
     private final JFrame frame;
-    private final JLabel matchLabel;
-    private final JLabel turnLabel;
-    private final JLabel statsLabel;
-    private final JLabel statusLabel;
+    private final StatusBar statusBar;
     private final JButton endTurnButton;
     private final JButton undoSpellButton;
     private final JPanel modeSelectPanel;
     private final BoardPanel boardPanel;
+    private final CardInfoPanel cardInfoPanel;
+    private final UiMediator uiMediator;
 
     private GameClient client;
     private boolean gameOver = false;
@@ -24,35 +23,26 @@ public class GameWindow {
     public GameWindow() {
         frame = new JFrame("Card Game");
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        frame.setSize(820, 1040);
+        frame.setSize(1080, 1040);
         frame.setLocationRelativeTo(null);
 
-        JPanel topPanel = new JPanel(new GridLayout(4, 1));
-        matchLabel = new JLabel("", SwingConstants.CENTER);
-        turnLabel = new JLabel("", SwingConstants.CENTER);
-        statsLabel = new JLabel("", SwingConstants.CENTER);
-        statusLabel = new JLabel("Connecting to server...", SwingConstants.CENTER);
-
-        Font font = new Font("Arial", Font.BOLD, 16);
-        matchLabel.setFont(font);
-        turnLabel.setFont(font);
-        statsLabel.setFont(font);
-        statusLabel.setFont(font);
-
-        topPanel.add(matchLabel);
-        topPanel.add(turnLabel);
-        topPanel.add(statsLabel);
-        topPanel.add(statusLabel);
+        statusBar = new StatusBar();
 
         modeSelectPanel = buildModeSelectPanel();
 
         boardPanel = new BoardPanel(this::sendPlayAction);
         boardPanel.setVisible(false);
 
+        cardInfoPanel = new CardInfoPanel();
+        cardInfoPanel.setVisible(false);
+
+        uiMediator = new GameUiMediator(boardPanel, cardInfoPanel, statusBar);
+
         endTurnButton = new JButton("End Turn");
         endTurnButton.setEnabled(false);
         endTurnButton.addActionListener(e -> {
             if (client != null && !gameOver) {
+                uiMediator.notify(boardPanel, UiEvent.TURN_ENDED, null);
                 client.endTurn();
             }
         });
@@ -70,8 +60,9 @@ public class GameWindow {
         bottomPanel.add(endTurnButton);
 
         frame.setLayout(new BorderLayout());
-        frame.add(topPanel, BorderLayout.NORTH);
+        frame.add(statusBar, BorderLayout.NORTH);
         frame.add(modeSelectPanel, BorderLayout.CENTER);
+        frame.add(cardInfoPanel, BorderLayout.EAST);
         frame.add(bottomPanel, BorderLayout.SOUTH);
         frame.setVisible(true);
     }
@@ -98,7 +89,7 @@ public class GameWindow {
                         + "<br>Watch a match that's already being played. Hands and traps stay hidden.</div></html>");
         spectateButton.addActionListener(e -> {
             if (client != null) {
-                statusLabel.setText("Looking for matches...");
+                statusBar.setStatusText("Looking for matches...");
                 client.requestMatchList();
             }
         });
@@ -111,7 +102,7 @@ public class GameWindow {
     public void showMatchList(List<MatchListing> matches) {
         SwingUtilities.invokeLater(() -> {
             if (matches.isEmpty()) {
-                statusLabel.setText("Choose a match type to begin.");
+                statusBar.setStatusText("Choose a match type to begin.");
                 JOptionPane.showMessageDialog(frame, "No matches are being played right now.",
                         "Spectate", JOptionPane.INFORMATION_MESSAGE);
                 return;
@@ -122,13 +113,13 @@ public class GameWindow {
                     "Spectate", JOptionPane.OK_CANCEL_OPTION, JOptionPane.QUESTION_MESSAGE);
             MatchListing picked = (MatchListing) selector.getSelectedItem();
             if (choice != JOptionPane.OK_OPTION || picked == null) {
-                statusLabel.setText("Choose a match type to begin.");
+                statusBar.setStatusText("Choose a match type to begin.");
                 return;
             }
 
             frame.remove(modeSelectPanel);
             frame.add(boardPanel, BorderLayout.CENTER);
-            statusLabel.setText("Joining Match " + picked.matchId() + "...");
+            statusBar.setStatusText("Joining Match " + picked.matchId() + "...");
             client.spectate(picked.matchId());
             frame.revalidate();
             frame.repaint();
@@ -139,13 +130,15 @@ public class GameWindow {
         SwingUtilities.invokeLater(() -> {
             gameOver = false;
             inMatch = false;
-            matchLabel.setText("Spectating Match " + matchId);
-            turnLabel.setText("Waiting for game state...");
-            statusLabel.setText("You are spectating - hands and traps are hidden.");
+            statusBar.setMatchText("Spectating Match " + matchId);
+            statusBar.setTurnText("Waiting for game state...");
+            statusBar.setStatusText("You are spectating - click any visible card to inspect it.");
             endTurnButton.setEnabled(false);
             undoSpellButton.setEnabled(false);
             boardPanel.resetGame();
             boardPanel.setVisible(true);
+            cardInfoPanel.clear();
+            cardInfoPanel.setVisible(true);
             frame.revalidate();
             frame.repaint();
         });
@@ -156,10 +149,11 @@ public class GameWindow {
         SwingUtilities.invokeLater(() -> {
             frame.remove(boardPanel);
             frame.add(modeSelectPanel, BorderLayout.CENTER);
-            matchLabel.setText("");
-            turnLabel.setText("");
-            statsLabel.setText("");
-            statusLabel.setText("Choose a match type to begin.");
+            cardInfoPanel.setVisible(false);
+            statusBar.setMatchText("");
+            statusBar.setTurnText("");
+            statusBar.setStatsText("");
+            statusBar.setStatusText("Choose a match type to begin.");
             JOptionPane.showMessageDialog(frame, "That match can't be watched anymore.",
                     "Spectate", JOptionPane.INFORMATION_MESSAGE);
             frame.revalidate();
@@ -172,11 +166,12 @@ public class GameWindow {
             if (gameOver) {
                 return;
             }
-            matchLabel.setText("Spectating Match " + state.matchId());
-            turnLabel.setText("PLAYER " + state.turnPlayer() + "'S TURN");
-            statsLabel.setText("Player 1: " + state.player1Health() + " HP" + formatClock(state.player1SecondsLeft())
+            statusBar.setMatchText("Spectating Match " + state.matchId());
+            statusBar.setTurnText("PLAYER " + state.turnPlayer() + "'S TURN");
+            statusBar.setStatsText("Player 1: " + state.player1Health() + " HP" + formatClock(state.player1SecondsLeft())
                     + "    |    Player 2: " + state.player2Health() + " HP" + formatClock(state.player2SecondsLeft()));
             boardPanel.setVisible(true);
+            cardInfoPanel.setVisible(true);
             boardPanel.updateSpectatorState(state);
             frame.revalidate();
             frame.repaint();
@@ -187,8 +182,9 @@ public class GameWindow {
         SwingUtilities.invokeLater(() -> {
             gameOver = true;
             boardPanel.setGameOver();
-            turnLabel.setText("PLAYER " + winnerNumber + " WINS");
-            statusLabel.setText("The match is over.");
+            uiMediator.notify(boardPanel, UiEvent.SELECTION_CLEARED, null);
+            statusBar.setTurnText("PLAYER " + winnerNumber + " WINS");
+            statusBar.setStatusText("The match is over.");
             frame.revalidate();
             frame.repaint();
         });
@@ -211,7 +207,7 @@ public class GameWindow {
         frame.add(boardPanel, BorderLayout.CENTER);
 
         client.joinQueue(mode);
-        statusLabel.setText("Waiting for opponent...");
+        statusBar.setStatusText("Waiting for opponent...");
 
         frame.revalidate();
         frame.repaint();
@@ -221,27 +217,24 @@ public class GameWindow {
         this.client = client;
     }
 
-    /*
-     * Shown once the socket actually connects - the player picks a mode
-     * from modeSelectPanel (already on screen since construction) before
-     * anything gets queued server-side.
-     */
     public void showModeSelect() {
-        SwingUtilities.invokeLater(() -> statusLabel.setText("Choose a match type to begin."));
+        SwingUtilities.invokeLater(() -> statusBar.setStatusText("Choose a match type to begin."));
     }
 
     public void setWaiting() {
         SwingUtilities.invokeLater(() -> {
             gameOver = false;
             inMatch = false;
-            matchLabel.setText("");
-            turnLabel.setText("");
-            statsLabel.setText("");
-            statusLabel.setText("Waiting for opponent");
+            statusBar.setMatchText("");
+            statusBar.setTurnText("");
+            statusBar.setStatsText("");
+            statusBar.setStatusText("Waiting for opponent");
             endTurnButton.setEnabled(false);
             undoSpellButton.setEnabled(false);
             boardPanel.resetGame();
             boardPanel.setVisible(false);
+            cardInfoPanel.clear();
+            cardInfoPanel.setVisible(false);
             frame.revalidate();
             frame.repaint();
         });
@@ -251,11 +244,13 @@ public class GameWindow {
         SwingUtilities.invokeLater(() -> {
             gameOver = false;
             inMatch = true;
-            matchLabel.setText("Match " + matchId);
-            statusLabel.setText("Match started");
-            turnLabel.setText("Waiting for game state...");
+            statusBar.setMatchText("Match " + matchId);
+            statusBar.setStatusText("Match started");
+            statusBar.setTurnText("Waiting for game state...");
             boardPanel.resetGame();
             boardPanel.setVisible(true);
+            cardInfoPanel.clear();
+            cardInfoPanel.setVisible(true);
             frame.revalidate();
             frame.repaint();
         });
@@ -282,28 +277,28 @@ public class GameWindow {
         SwingUtilities.invokeLater(() -> {
             gameOver = false;
             inMatch = true;
-            matchLabel.setText("Match " + matchId);
-            statsLabel.setText(buildStatsText(
+            statusBar.setMatchText("Match " + matchId);
+            statusBar.setStatsText(buildStatsText(
                     ownHealth, ownEnergy, opponentHealth, ownSecondsLeft, opponentSecondsLeft));
 
+            if (yourTurn) {
+                statusBar.setTurnText("YOUR TURN");
+                statusBar.setStatusText("Click a card to inspect, or drag to play");
+                endTurnButton.setEnabled(true);
+                undoSpellButton.setEnabled(true);
+            } else {
+                statusBar.setTurnText("OPPONENT'S TURN");
+                statusBar.setStatusText("Waiting for opponent (click any card to inspect)...");
+                endTurnButton.setEnabled(false);
+                undoSpellButton.setEnabled(false);
+            }
+
             boardPanel.setVisible(true);
+            cardInfoPanel.setVisible(true);
             boardPanel.updateState(
                     ownHand, opponentHandCount, ownFront, opponentFront,
                     ownBack, opponentBackZones, ownGraveyardTop, opponentGraveyardTop,
                     yourTurn, archerTargets);
-
-
-            if (yourTurn) {
-                turnLabel.setText("YOUR TURN");
-                statusLabel.setText("Play cards, then end your turn");
-                endTurnButton.setEnabled(true);
-                undoSpellButton.setEnabled(true);
-            } else {
-                turnLabel.setText("OPPONENT'S TURN");
-                statusLabel.setText("Waiting for opponent...");
-                endTurnButton.setEnabled(false);
-                undoSpellButton.setEnabled(false);
-            }
 
             frame.revalidate();
             frame.repaint();
@@ -314,16 +309,11 @@ public class GameWindow {
             int ownHealth, int ownEnergy, int opponentHealth,
             Integer ownSecondsLeft, Integer opponentSecondsLeft) {
 
-        String text = "You: " + ownHealth + " HP, " + ownEnergy + " energy"
+        return "You: " + ownHealth + " HP, " + ownEnergy + " energy"
                 + formatClock(ownSecondsLeft)
                 + "    |    Opponent: " + opponentHealth + " HP" + formatClock(opponentSecondsLeft);
-        return text;
     }
 
-    /*
-     * Empty string for an untimed match - ownSecondsLeft/opponentSecondsLeft
-     * are only ever non-null when this match actually has a clock.
-     */
     private String formatClock(Integer secondsLeft) {
         if (secondsLeft == null) {
             return "";
@@ -336,8 +326,9 @@ public class GameWindow {
             gameOver = true;
             boardPanel.setGameOver();
             boardPanel.setVisible(true);
-            turnLabel.setText("YOU WIN");
-            statusLabel.setText("Your opponent has been defeated.");
+            uiMediator.notify(boardPanel, UiEvent.SELECTION_CLEARED, null);
+            statusBar.setTurnText("YOU WIN");
+            statusBar.setStatusText("Your opponent has been defeated.");
             endTurnButton.setEnabled(false);
             undoSpellButton.setEnabled(false);
             frame.revalidate();
@@ -350,8 +341,9 @@ public class GameWindow {
             gameOver = true;
             boardPanel.setGameOver();
             boardPanel.setVisible(true);
-            turnLabel.setText("YOU LOSE");
-            statusLabel.setText("Your health - or your clock - reached zero.");
+            uiMediator.notify(boardPanel, UiEvent.SELECTION_CLEARED, null);
+            statusBar.setTurnText("YOU LOSE");
+            statusBar.setStatusText("Your health - or your clock - reached zero.");
             endTurnButton.setEnabled(false);
             undoSpellButton.setEnabled(false);
             frame.revalidate();
@@ -362,13 +354,14 @@ public class GameWindow {
     public void showCannotConnect() {
         SwingUtilities.invokeLater(() -> {
             gameOver = true;
-            matchLabel.setText("");
-            turnLabel.setText("");
-            statsLabel.setText("");
-            statusLabel.setText("Can't connect to server");
+            statusBar.setMatchText("");
+            statusBar.setTurnText("");
+            statusBar.setStatsText("");
+            statusBar.setStatusText("Can't connect to server");
             endTurnButton.setEnabled(false);
             undoSpellButton.setEnabled(false);
             boardPanel.setVisible(false);
+            cardInfoPanel.setVisible(false);
             frame.revalidate();
             frame.repaint();
         });
@@ -377,13 +370,14 @@ public class GameWindow {
     public void showDisconnected() {
         SwingUtilities.invokeLater(() -> {
             gameOver = true;
-            matchLabel.setText("");
-            turnLabel.setText("");
-            statsLabel.setText("");
-            statusLabel.setText("Disconnected from server");
+            statusBar.setMatchText("");
+            statusBar.setTurnText("");
+            statusBar.setStatsText("");
+            statusBar.setStatusText("Disconnected from server");
             endTurnButton.setEnabled(false);
             undoSpellButton.setEnabled(false);
             boardPanel.setVisible(false);
+            cardInfoPanel.setVisible(false);
             frame.revalidate();
             frame.repaint();
         });
@@ -414,7 +408,7 @@ public class GameWindow {
     public void showArcherCommandStatus(String text) {
         SwingUtilities.invokeLater(() -> {
             if (inMatch && !gameOver) {
-                statusLabel.setText(text);
+                statusBar.setStatusText(text);
             }
         });
     }

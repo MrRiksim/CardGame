@@ -2,6 +2,7 @@ package game.server.cards;
 
 import game.server.Match;
 import game.server.Player;
+import game.server.memento.UnitMemento;
 
 import java.util.List;
 
@@ -34,6 +35,18 @@ public abstract class UnitBuff extends Unit {
 
     public Unit getWrapped() {
         return wrapped;
+    }
+
+    @Override
+    public UnitMemento createMemento() {
+        UnitMemento ownState = super.createMemento();
+        Unit savedWrapped = wrapped;
+        UnitMemento wrappedState = wrapped.createMemento();
+        return () -> {
+            ownState.restore();
+            wrapped = savedWrapped;
+            wrappedState.restore();
+        };
     }
 
     /* What this particular layer contributes; a buff overrides only what it affects. */

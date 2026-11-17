@@ -1,16 +1,14 @@
 package game.server.cards.spells;
 
-import game.server.Match;
-import game.server.Player;
-import game.server.cards.Spell;
-import game.server.cards.SpellType;
+import game.server.cards.BuffSpell;
 import game.server.cards.Unit;
+import game.server.cards.UnitBuff;
 import game.server.cards.units.buffs.ShieldBuff;
 
-public class ShieldSpell extends Spell {
+public class ShieldSpell extends BuffSpell {
 
     private ShieldSpell() {
-        super("Shield", "Gives a friendly unit a shield that absorbs one hit of any size.", 2, SpellType.BUFF);
+        super("Shield", "Gives a friendly unit a shield that absorbs one hit of any size.", 2);
     }
 
     /*
@@ -21,10 +19,7 @@ public class ShieldSpell extends Spell {
     }
 
     @Override
-    public void apply(Match match, Player caster, Unit target) {
-        if (target == null) {
-            return;
-        }
-        match.replaceUnit(target, new ShieldBuff(target, this));
+    protected UnitBuff createBuff(Unit target) {
+        return new ShieldBuff(target, this);
     }
 }

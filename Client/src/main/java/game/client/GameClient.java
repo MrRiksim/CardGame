@@ -36,6 +36,24 @@ public class GameClient extends WebSocketClient {
     public void onMessage(String message) {
         System.out.println("Server: " + message);
 
+        if (message.startsWith("CHAT|")) {
+            // Limit the split so pipes, commas and semicolons in chat remain literal text.
+            String[] parts = message.split("\\|", 3);
+            if (parts.length == 3 && (parts[1].equals("1") || parts[1].equals("2"))) {
+                int sender = Integer.parseInt(parts[1]);
+                window.showChatMessage(sender == myPlayerNumber ? "You" : "Player " + sender, parts[2]);
+            }
+            return;
+        }
+        if (message.startsWith("CHAT_ERROR|")) {
+            window.showChatMessage("System", message.substring("CHAT_ERROR|".length()));
+            return;
+        }
+        if (message.startsWith("CHAT_INFO|")) {
+            window.showChatMessage("System", message.substring("CHAT_INFO|".length()));
+            return;
+        }
+
         if (message.equals("ARCHER_TARGET_OK")) {
             window.showArcherCommandStatus("Archer target selected. You can undo before ending your turn.");
             return;
@@ -275,7 +293,9 @@ public class GameClient extends WebSocketClient {
         }
 
         for (String entry : data.split(";")) {
-            String[] parts = entry.split(",");
+            // Description is the last field and may itself contain commas.
+            int fieldCount = entry.startsWith("UNIT,") ? 10 : 6;
+            String[] parts = entry.split(",", fieldCount);
             if (parts.length == 0) {
                 continue;
             }
@@ -370,7 +390,7 @@ public class GameClient extends WebSocketClient {
         }
 
         for (String entry : data.split(";")) {
-            String[] parts = entry.split(",");
+            String[] parts = entry.split(",", 6);
             if (parts.length != 6) {
                 continue;
             }
@@ -418,6 +438,18 @@ public class GameClient extends WebSocketClient {
     private ClientCard parseGraveyardTop(String data) {
         List<ClientCard> cards = parseHand(data);
         return cards.isEmpty() ? null : cards.get(0);
+    }
+
+    public boolean sendChat(String text) {
+        if (!isOpen()) {
+            return false;
+        }
+        try {
+            send("CHAT|" + text);
+            return true;
+        } catch (org.java_websocket.exceptions.WebsocketNotConnectedException exception) {
+            return false;
+        }
     }
 
     public void joinQueue(GameMode mode) {

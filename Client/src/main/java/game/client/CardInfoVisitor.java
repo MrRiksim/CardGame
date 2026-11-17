@@ -46,6 +46,9 @@ public class CardInfoVisitor implements ClientCardVisitor {
             case BUFF -> "Friendly Front Units";
             case SPECIAL -> "Any Empty Zone / Graveyard / Deck";
         };
+        if (spell.name().equals("Healing Wave") || spell.name().equals("Raise the Fallen")) {
+            validTargets = "Your Graveyard / Deck (no unit target needed)";
+        }
         rows.add(new String[]{"Target", validTargets});
         hint = "Selected Spell: " + spell.name() + " — drag onto a highlighted target (" + validTargets + ").";
     }

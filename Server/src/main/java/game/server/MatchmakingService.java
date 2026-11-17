@@ -1,6 +1,9 @@
 package game.server;
 
 import game.server.cards.Unit;
+import game.server.interpreter.CommandParser;
+import game.server.interpreter.InterpretationResult;
+import game.server.interpreter.InterpreterContext;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -27,6 +30,7 @@ public class MatchmakingService {
     private final Map<PlayerConnection, MatchFacade> playerMatches = new HashMap<>();
     private final Map<Player, Deque<GameCommand>> archerCommandHistory = new HashMap<>();
     private final MatchSettingsDirector settingsDirector = new MatchSettingsDirector();
+    private final CommandParser commandParser = new CommandParser();
 
     /* One room per active match (keyed by match id), and which room each spectator is in. */
     private final Map<Integer, SpectatorRoom> spectatorRooms = new HashMap<>();
@@ -90,6 +94,10 @@ public class MatchmakingService {
     }
 
     public synchronized void handleMessage(PlayerConnection connection, String message) {
+        if (message.startsWith("CHAT|")) {
+            handleChat(connection, message.substring("CHAT|".length()));
+            return;
+        }
         if (message.startsWith("JOIN|")) {
             handleJoin(connection, message);
             return;
@@ -196,6 +204,38 @@ public class MatchmakingService {
         }
 
         System.out.println("Unknown message: " + message);
+    }
+
+    private void handleChat(PlayerConnection connection, String text) {
+        MatchFacade match = playerMatches.get(connection);
+        if (match == null || !match.isActive()) {
+            connection.send("CHAT_ERROR|Chat is available during an active match.");
+            return;
+        }
+        Player sender = match.getPlayerFor(connection);
+        if (sender == null) {
+            return;
+        }
+        if (text.length() > 300) {
+            connection.send("CHAT_ERROR|Messages may contain up to 300 characters.");
+            return;
+        }
+        String message = text.replaceAll("\\p{Cntrl}", " ").strip();
+        if (message.isEmpty()) {
+            return;
+        }
+        if (message.startsWith("/")) {
+            InterpretationResult result = commandParser.parse(message).interpret(new InterpreterContext(match, sender));
+            sender.send("CHAT_INFO|" + result.message());
+            if (result.stateChanged()) {
+                broadcastState(match);
+            }
+            return;
+        }
+        // Identity comes from the connection, never from text supplied by a client.
+        String packet = "CHAT|" + match.getPlayerNumber(sender) + "|" + message;
+        sender.send(packet);
+        match.getOpponent(sender).send(packet);
     }
 
     private void handleJoin(PlayerConnection connection, String message) {

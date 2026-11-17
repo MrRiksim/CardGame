@@ -1,6 +1,7 @@
 package game.server.cards;
 import game.server.Match;
 import game.server.Player;
+import game.server.memento.UnitMemento;
 import game.server.cards.state.BuffedState;
 import game.server.cards.state.DeadState;
 import game.server.cards.state.InjuredState;
@@ -76,6 +77,18 @@ public abstract class Unit extends Card {
      * states themselves or dynamically reflected when buffs are wrapped.
      */
     private UnitState state;
+
+    /** Memento: preserve identity and private mutable state rather than cloning a new card. */
+    public UnitMemento createMemento() {
+        int savedHealth = health;
+        UnitState savedState = state;
+        Unit savedOriginal = shallowOriginal;
+        return () -> {
+            health = savedHealth;
+            state = savedState;
+            shallowOriginal = savedOriginal;
+        };
+    }
 
     public void setInternalHealth(int health) {
         this.health = health;

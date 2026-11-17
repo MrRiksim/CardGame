@@ -2,6 +2,7 @@ package game.server.cards;
 
 import game.server.Match;
 import game.server.Player;
+import game.server.memento.UnitMemento;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -28,6 +29,22 @@ import java.util.List;
 public class UnitGroup extends Unit implements UnitContainer {
 
     private final List<Unit> children = new ArrayList<>();
+
+    @Override
+    public UnitMemento createMemento() {
+        UnitMemento ownState = super.createMemento();
+        List<Unit> savedChildren = new ArrayList<>(children);
+        List<UnitMemento> childStates = new ArrayList<>();
+        for (Unit child : savedChildren) {
+            childStates.add(child.createMemento());
+        }
+        return () -> {
+            ownState.restore();
+            children.clear();
+            children.addAll(savedChildren);
+            childStates.forEach(UnitMemento::restore);
+        };
+    }
 
     UnitGroup(Unit carried, Unit firstRider) {
         super(carried.getName(), carried.getDescription(), carried.getEnergyCost(),

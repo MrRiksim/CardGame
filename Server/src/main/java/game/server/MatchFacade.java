@@ -1,6 +1,7 @@
 package game.server;
 
 import game.server.cards.Unit;
+import game.server.cards.Card;
 
 public class MatchFacade {
 
@@ -12,6 +13,10 @@ public class MatchFacade {
 
     public synchronized boolean playUnit(Player player, String cardId, int zoneIndex) {
         return match.playUnit(player, cardId, zoneIndex);
+    }
+
+    public synchronized boolean giveCard(Player player, Card card) {
+        return match.giveCard(player, card);
     }
 
     public synchronized boolean playSpell(Player player, String cardId, Unit targetUnit) {

@@ -1,16 +1,14 @@
 package game.server.cards.spells;
 
-import game.server.Match;
-import game.server.Player;
-import game.server.cards.Spell;
-import game.server.cards.SpellType;
+import game.server.cards.BuffSpell;
 import game.server.cards.Unit;
+import game.server.cards.UnitBuff;
 import game.server.cards.units.buffs.HealthBoostBuff;
 
-public class HealthBoostSpell extends Spell {
+public class HealthBoostSpell extends BuffSpell {
 
     private HealthBoostSpell() {
-        super("Health Boost", "Grants a friendly unit 1 extra health.", 1, SpellType.BUFF);
+        super("Health Boost", "Grants a friendly unit 1 extra health.", 1);
     }
 
     /*
@@ -21,10 +19,7 @@ public class HealthBoostSpell extends Spell {
     }
 
     @Override
-    public void apply(Match match, Player caster, Unit target) {
-        if (target == null) {
-            return;
-        }
-        match.replaceUnit(target, new HealthBoostBuff(target, this));
+    protected UnitBuff createBuff(Unit target) {
+        return new HealthBoostBuff(target, this);
     }
 }

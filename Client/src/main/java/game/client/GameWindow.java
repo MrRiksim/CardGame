@@ -14,6 +14,8 @@ public class GameWindow {
     private final JPanel modeSelectPanel;
     private final BoardPanel boardPanel;
     private final CardInfoPanel cardInfoPanel;
+    private final ChatPanel chatPanel;
+    private final JPanel sidePanel;
     private final UiMediator uiMediator;
 
     private GameClient client;
@@ -35,6 +37,13 @@ public class GameWindow {
 
         cardInfoPanel = new CardInfoPanel();
         cardInfoPanel.setVisible(false);
+
+        chatPanel = new ChatPanel(this::sendChat);
+        sidePanel = new JPanel(new BorderLayout(0, 8));
+        sidePanel.setPreferredSize(new Dimension(300, 0));
+        sidePanel.add(cardInfoPanel, BorderLayout.CENTER);
+        sidePanel.add(chatPanel, BorderLayout.SOUTH);
+        sidePanel.setVisible(false);
 
         uiMediator = new GameUiMediator(boardPanel, cardInfoPanel, statusBar);
 
@@ -62,7 +71,7 @@ public class GameWindow {
         frame.setLayout(new BorderLayout());
         frame.add(statusBar, BorderLayout.NORTH);
         frame.add(modeSelectPanel, BorderLayout.CENTER);
-        frame.add(cardInfoPanel, BorderLayout.EAST);
+        frame.add(sidePanel, BorderLayout.EAST);
         frame.add(bottomPanel, BorderLayout.SOUTH);
         frame.setVisible(true);
     }
@@ -128,6 +137,9 @@ public class GameWindow {
 
     public void showSpectating(int matchId) {
         SwingUtilities.invokeLater(() -> {
+            sidePanel.setVisible(true);
+            chatPanel.reset("Chat is available to the two players in the match.");
+            chatPanel.setChatEnabled(false);
             gameOver = false;
             inMatch = false;
             statusBar.setMatchText("Spectating Match " + matchId);
@@ -147,6 +159,8 @@ public class GameWindow {
     /* The match ended (or never existed) before the server could add us - back to the menu. */
     public void showSpectateRejected() {
         SwingUtilities.invokeLater(() -> {
+            sidePanel.setVisible(false);
+            chatPanel.setChatEnabled(false);
             frame.remove(boardPanel);
             frame.add(modeSelectPanel, BorderLayout.CENTER);
             cardInfoPanel.setVisible(false);
@@ -180,6 +194,7 @@ public class GameWindow {
 
     public void showMatchOver(int winnerNumber) {
         SwingUtilities.invokeLater(() -> {
+            chatPanel.setChatEnabled(false);
             gameOver = true;
             boardPanel.setGameOver();
             uiMediator.notify(boardPanel, UiEvent.SELECTION_CLEARED, null);
@@ -223,6 +238,9 @@ public class GameWindow {
 
     public void setWaiting() {
         SwingUtilities.invokeLater(() -> {
+            sidePanel.setVisible(false);
+            chatPanel.reset("Waiting for a match.");
+            chatPanel.setChatEnabled(false);
             gameOver = false;
             inMatch = false;
             statusBar.setMatchText("");
@@ -242,6 +260,9 @@ public class GameWindow {
 
     public void showMatch(int matchId) {
         SwingUtilities.invokeLater(() -> {
+            sidePanel.setVisible(true);
+            chatPanel.reset("Press Enter to chat. Use /give <card name> to get a card, or /cards to list names.");
+            chatPanel.setChatEnabled(true);
             gameOver = false;
             inMatch = true;
             statusBar.setMatchText("Match " + matchId);
@@ -323,6 +344,8 @@ public class GameWindow {
 
     public void showWin() {
         SwingUtilities.invokeLater(() -> {
+            chatPanel.setChatEnabled(false);
+            chatPanel.addMessage("System", "Match ended.");
             gameOver = true;
             boardPanel.setGameOver();
             boardPanel.setVisible(true);
@@ -338,6 +361,8 @@ public class GameWindow {
 
     public void showLose() {
         SwingUtilities.invokeLater(() -> {
+            chatPanel.setChatEnabled(false);
+            chatPanel.addMessage("System", "Match ended.");
             gameOver = true;
             boardPanel.setGameOver();
             boardPanel.setVisible(true);
@@ -353,6 +378,8 @@ public class GameWindow {
 
     public void showCannotConnect() {
         SwingUtilities.invokeLater(() -> {
+            sidePanel.setVisible(false);
+            chatPanel.setChatEnabled(false);
             gameOver = true;
             statusBar.setMatchText("");
             statusBar.setTurnText("");
@@ -369,6 +396,8 @@ public class GameWindow {
 
     public void showDisconnected() {
         SwingUtilities.invokeLater(() -> {
+            chatPanel.setChatEnabled(false);
+            chatPanel.addMessage("System", "Disconnected from server.");
             gameOver = true;
             statusBar.setMatchText("");
             statusBar.setTurnText("");
@@ -381,6 +410,18 @@ public class GameWindow {
             frame.revalidate();
             frame.repaint();
         });
+    }
+
+    private boolean sendChat(String text) {
+        if (client != null && inMatch && !gameOver && client.sendChat(text)) {
+            return true;
+        }
+        chatPanel.addMessage("System", "Message not sent. Chat requires an active connection and match.");
+        return false;
+    }
+
+    public void showChatMessage(String author, String text) {
+        SwingUtilities.invokeLater(() -> chatPanel.addMessage(author, text));
     }
 
     private void sendPlayAction(PlayAction action) {

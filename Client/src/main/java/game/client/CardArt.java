@@ -16,6 +16,9 @@ public final class CardArt {
     private static final Map<String, String> FILE_NAME_OVERRIDES = Map.ofEntries(
             Map.entry("Knight", "knight.png"),
             Map.entry("Lightning Strike", "lightning_strike.png"),
+            Map.entry("Chain Lightning", "chain_lightning.png"),
+            Map.entry("Healing Wave", "healing_wave.png"),
+            Map.entry("Raise the Fallen", "raise_the_fallen.png"),
             Map.entry("Bear Trap", "bear_trap.png"),
             Map.entry("Health Boost", "health_boost.png"),
             Map.entry("Damage Potion", "damage_potion.png"),

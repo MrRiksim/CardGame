@@ -9,6 +9,7 @@ import game.server.cards.UnitBuff;
 import game.server.cards.UnitContainer;
 import game.server.memento.SpellMemento;
 import game.server.memento.SpellMementoHistory;
+import game.server.memento.UnitMemento;
 import game.server.spectating.MatchSnapshot;
 import game.server.spectating.SideSnapshot;
 
@@ -164,6 +165,17 @@ public class Match {
         return remaining;
     }
 
+    /** Interpreter commands enter through Match so state versions and undo stay consistent. */
+    public synchronized boolean giveCard(Player player, Card card) {
+        if (!active || (player != player1 && player != player2) || card == null || !player.addToHand(card)) {
+            return false;
+        }
+        // Earlier snapshots must not remove a card granted after they were captured.
+        spellUndoHistory.clear();
+        stateChanged();
+        return true;
+    }
+
     /*
      * Attempts to place a unit from hand into one of the player's front
      * zones. Playing a unit is trap-relevant, so the opponent's face-down
@@ -205,7 +217,12 @@ public class Match {
          * or mutates any field zones or graveyards. The Caretaker (SpellMementoHistory)
          * holds it on the stack; Match restores it in undoLastSpell().
          */
-        spellUndoHistory.push(createSpellMemento(player));
+        if (spell.isUndoable()) {
+            spellUndoHistory.push(createSpellMemento());
+        } else {
+            // An older snapshot must not undo across an irreversible spell either.
+            spellUndoHistory.clear();
+        }
 
         player.spendEnergy(spell.getEnergyCost());
         player.getHand().remove(spell);
@@ -321,102 +338,65 @@ public class Match {
      * restoration ("saugus duomenų atstatymas").
      */
     private static final class MatchSpellMemento implements SpellMemento {
-        private final Player caster;
-        private final int casterEnergyBefore;
-        private final List<Card> casterHandBefore;
-        private final int casterGraveyardSizeBefore;
-        private final int opponentGraveyardSizeBefore;
-        private final Unit[] player1UnitsBefore;
-        private final int[] player1HealthBefore;
-        private final game.server.cards.state.UnitState[] player1StatesBefore;
-        private final Unit[] player2UnitsBefore;
-        private final int[] player2HealthBefore;
-        private final game.server.cards.state.UnitState[] player2StatesBefore;
+        private final PlayerSpellSnapshot player1Before;
+        private final PlayerSpellSnapshot player2Before;
 
-        private MatchSpellMemento(
-                Player caster,
-                int casterEnergyBefore,
-                List<Card> casterHandBefore,
-                int casterGraveyardSizeBefore,
-                int opponentGraveyardSizeBefore,
-                Unit[] player1UnitsBefore,
-                int[] player1HealthBefore,
-                game.server.cards.state.UnitState[] player1StatesBefore,
-                Unit[] player2UnitsBefore,
-                int[] player2HealthBefore,
-                game.server.cards.state.UnitState[] player2StatesBefore) {
-            this.caster = caster;
-            this.casterEnergyBefore = casterEnergyBefore;
-            this.casterHandBefore = casterHandBefore;
-            this.casterGraveyardSizeBefore = casterGraveyardSizeBefore;
-            this.opponentGraveyardSizeBefore = opponentGraveyardSizeBefore;
-            this.player1UnitsBefore = player1UnitsBefore;
-            this.player1HealthBefore = player1HealthBefore;
-            this.player1StatesBefore = player1StatesBefore;
-            this.player2UnitsBefore = player2UnitsBefore;
-            this.player2HealthBefore = player2HealthBefore;
-            this.player2StatesBefore = player2StatesBefore;
+        private MatchSpellMemento(Player player1, Player player2) {
+            player1Before = new PlayerSpellSnapshot(player1);
+            player2Before = new PlayerSpellSnapshot(player2);
         }
     }
 
     /**
-     * Design pattern – Memento (Originator, snapshot creation).
-     *
-     * <p>Captures a complete snapshot of the match state right before a spell is resolved:
-     * <ul>
-     *   <li>the caster's pre-cast energy</li>
-     *   <li>a copy of the caster's hand (including the spell card)</li>
-     *   <li>caster and opponent graveyard sizes</li>
-     *   <li>the exact units, health, and states across all front zones for both players</li>
-     * </ul>
+     * Match-owned snapshot of card membership plus opaque unit mementos.
+     * Original references preserve card IDs, rider ownership and shallow-copy links.
+     * Units save their own nested/decorated state, so Match needs no buff-type checks.
      */
-    private SpellMemento createSpellMemento(Player caster) {
-        Player opponent = getOpponent(caster);
+    private static final class PlayerSpellSnapshot {
+        private final Player player;
+        private final int energy;
+        private final List<Card> hand;
+        private final List<Card> graveyard;
+        private final Unit[] zones;
+        private final List<UnitMemento> unitStates = new ArrayList<>();
 
-        int casterEnergyBefore = caster.getEnergy();
-        List<Card> casterHandBefore = new ArrayList<>(caster.getHand());
-        int casterGraveyardBefore = caster.getGraveyard().size();
-        int opponentGraveyardBefore = opponent.getGraveyard().size();
-
-        Unit[] p1Units = new Unit[NUMBER_OF_ZONES];
-        int[] p1Health = new int[NUMBER_OF_ZONES];
-        game.server.cards.state.UnitState[] p1States = new game.server.cards.state.UnitState[NUMBER_OF_ZONES];
-        captureZoneSnapshot(player1.getFrontZones(), p1Units, p1Health, p1States);
-
-        Unit[] p2Units = new Unit[NUMBER_OF_ZONES];
-        int[] p2Health = new int[NUMBER_OF_ZONES];
-        game.server.cards.state.UnitState[] p2States = new game.server.cards.state.UnitState[NUMBER_OF_ZONES];
-        captureZoneSnapshot(player2.getFrontZones(), p2Units, p2Health, p2States);
-
-        return new MatchSpellMemento(
-                caster,
-                casterEnergyBefore,
-                casterHandBefore,
-                casterGraveyardBefore,
-                opponentGraveyardBefore,
-                p1Units,
-                p1Health,
-                p1States,
-                p2Units,
-                p2Health,
-                p2States
-        );
-    }
-
-    private void captureZoneSnapshot(
-            Unit[] sourceZones,
-            Unit[] destUnits,
-            int[] destHealth,
-            game.server.cards.state.UnitState[] destStates) {
-
-        for (int i = 0; i < NUMBER_OF_ZONES; i++) {
-            Unit u = sourceZones[i];
-            destUnits[i] = u;
-            if (u != null) {
-                destHealth[i] = u.getHealth();
-                destStates[i] = u.getState();
+        private PlayerSpellSnapshot(Player player) {
+            this.player = player;
+            energy = player.getEnergy();
+            hand = new ArrayList<>(player.getHand());
+            graveyard = new ArrayList<>(player.getGraveyard());
+            zones = player.getFrontZones().clone();
+            for (Unit unit : zones) {
+                if (unit != null) {
+                    unitStates.add(unit.createMemento());
+                }
+            }
+            for (Card card : hand) {
+                if (card instanceof Unit unit) {
+                    unitStates.add(unit.createMemento());
+                }
+            }
+            for (Card card : graveyard) {
+                if (card instanceof Unit unit) {
+                    unitStates.add(unit.createMemento());
+                }
             }
         }
+
+        private void restore() {
+            player.restoreEnergy(energy);
+            player.getHand().clear();
+            player.getHand().addAll(hand);
+            player.getGraveyard().clear();
+            player.getGraveyard().addAll(graveyard);
+            System.arraycopy(zones, 0, player.getFrontZones(), 0, zones.length);
+            unitStates.forEach(UnitMemento::restore);
+        }
+    }
+
+    /** Memento (Originator): save before spending energy or resolving the spell. */
+    private SpellMemento createSpellMemento() {
+        return new MatchSpellMemento(player1, player2);
     }
 
     /**
@@ -425,9 +405,8 @@ public class Match {
      * <p>Pops the most recent spell memento and reverses every change made by that spell:
      * <ol>
      *   <li>Energy is restored to its pre-cast value.</li>
-     *   <li>The caster's hand is restored (spell is returned to hand; any drawn/resurrected/cloned cards removed).</li>
-     *   <li>Caster and opponent graveyards are trimmed to remove the cast spell, spent buffs, or dead units.</li>
-     *   <li>Both players' front field zones are restored (mirages/illusions removed, damage/buffs undone, killed units revived with exact pre-cast stats).</li>
+     *   <li>Both hands and graveyards are restored, including riders returned by deaths.</li>
+     *   <li>Both front rows and each unit's nested state are restored, including consumed buffs.</li>
      * </ol>
      *
      * @return {@code true} if the undo succeeded
@@ -442,50 +421,11 @@ public class Match {
             return false;
         }
 
-        Player caster = memento.caster;
-        Player opponent = getOpponent(caster);
-
-        // 1. Restore caster energy.
-        caster.restoreEnergy(memento.casterEnergyBefore);
-
-        // 2. Restore caster hand exactly as it was.
-        caster.getHand().clear();
-        caster.getHand().addAll(memento.casterHandBefore);
-
-        // 3. Trim caster graveyard back to pre-cast size.
-        List<Card> casterGraveyard = caster.getGraveyard();
-        while (casterGraveyard.size() > memento.casterGraveyardSizeBefore) {
-            casterGraveyard.remove(casterGraveyard.size() - 1);
-        }
-
-        // 4. Trim opponent graveyard back to pre-cast size.
-        List<Card> opponentGraveyard = opponent.getGraveyard();
-        while (opponentGraveyard.size() > memento.opponentGraveyardSizeBefore) {
-            opponentGraveyard.remove(opponentGraveyard.size() - 1);
-        }
-
-        // 5. Restore all field zones for both players.
-        restoreZoneSnapshot(player1.getFrontZones(), memento.player1UnitsBefore, memento.player1HealthBefore, memento.player1StatesBefore);
-        restoreZoneSnapshot(player2.getFrontZones(), memento.player2UnitsBefore, memento.player2HealthBefore, memento.player2StatesBefore);
+        memento.player1Before.restore();
+        memento.player2Before.restore();
 
         stateChanged();
         return true;
-    }
-
-    private void restoreZoneSnapshot(
-            Unit[] targetZones,
-            Unit[] savedUnits,
-            int[] savedHealth,
-            game.server.cards.state.UnitState[] savedStates) {
-
-        for (int i = 0; i < NUMBER_OF_ZONES; i++) {
-            Unit u = savedUnits[i];
-            targetZones[i] = u;
-            if (u != null) {
-                u.setInternalHealth(savedHealth[i]);
-                u.setState(savedStates[i]);
-            }
-        }
     }
 
     /** Whether the current player has a spell they can undo this turn. */
@@ -834,7 +774,7 @@ public class Match {
      * death check. Does nothing if the unit is no longer on the field, which
      * is the case after a buff spell or Cripple replaced it.
      */
-    private void resolveUnitState(Unit unit) {
+    public synchronized void resolveUnitState(Unit unit) {
         Player owner = ownerOf(unit);
         if (owner == null) {
             return;

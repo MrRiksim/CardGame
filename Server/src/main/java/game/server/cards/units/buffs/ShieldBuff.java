@@ -3,6 +3,7 @@ package game.server.cards.units.buffs;
 import game.server.cards.Unit;
 import game.server.cards.UnitBuff;
 import game.server.cards.Spell;
+import game.server.memento.UnitMemento;
 
 /**
  * Concrete Decorator - absorbs exactly one hit of any size. It changes no
@@ -12,6 +13,16 @@ import game.server.cards.Spell;
 public class ShieldBuff extends UnitBuff {
 
     private boolean used = false;
+
+    @Override
+    public UnitMemento createMemento() {
+        UnitMemento wrappedState = super.createMemento();
+        boolean savedUsed = used;
+        return () -> {
+            wrappedState.restore();
+            used = savedUsed;
+        };
+    }
 
     public ShieldBuff(Unit wrapped, Spell source) {
         super(wrapped, source);

@@ -1,5 +1,7 @@
 package game.server.cards;
 
+import game.server.memento.UnitMemento;
+
 public class SkeletonCard {
 
     private final int maxHP;
@@ -13,6 +15,11 @@ public class SkeletonCard {
     public String title() { return "Skeleton Warrior"; }
     public int getHP() {
         return HP;
+    }
+
+    public UnitMemento createMemento() {
+        int savedHP = HP;
+        return () -> HP = savedHP;
     }
     public int getArmor(){ return armor;}
     public int getMaxHealth() {
@@ -42,6 +49,16 @@ public class SkeletonCard {
 }
 class SkeletonCardAdapter extends Unit {
     private final SkeletonCard card;
+
+    @Override
+    public UnitMemento createMemento() {
+        UnitMemento ownState = super.createMemento();
+        UnitMemento adaptedState = card.createMemento();
+        return () -> {
+            ownState.restore();
+            adaptedState.restore();
+        };
+    }
 
     public SkeletonCardAdapter(SkeletonCard card) {
         super(

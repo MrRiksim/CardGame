@@ -125,6 +125,10 @@ public class Player {
         return hand.size() >= settings.maxHandSize();
     }
 
+    public int getMaxHandSize() {
+        return settings.maxHandSize();
+    }
+
     /* Adds a card if there is room. Returns whether it did. */
     public boolean addToHand(Card card) {
         if (isHandFull()) {

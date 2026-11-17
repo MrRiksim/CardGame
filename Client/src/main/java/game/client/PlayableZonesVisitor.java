@@ -34,6 +34,12 @@ public class PlayableZonesVisitor implements ClientCardVisitor {
 
     @Override
     public void visitSpell(ClientSpell spell) {
+        if (spell.name().equals("Healing Wave") || spell.name().equals("Raise the Fallen")) {
+            // Global effects need no unit target. Use the player's utility zones to cast.
+            zones.add(new ZoneRef(ZoneRef.Row.OWN_UTILITY, 0));
+            zones.add(new ZoneRef(ZoneRef.Row.OWN_UTILITY, 1));
+            return;
+        }
         switch (spell.spellType()) {
             case DAMAGE -> {
                 for (ClientUnit enemy : opponentFront) {

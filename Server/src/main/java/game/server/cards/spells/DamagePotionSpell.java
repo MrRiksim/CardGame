@@ -1,16 +1,14 @@
 package game.server.cards.spells;
 
-import game.server.Match;
-import game.server.Player;
-import game.server.cards.Spell;
-import game.server.cards.SpellType;
+import game.server.cards.BuffSpell;
 import game.server.cards.Unit;
+import game.server.cards.UnitBuff;
 import game.server.cards.units.buffs.DamagePotionBuff;
 
-public class DamagePotionSpell extends Spell {
+public class DamagePotionSpell extends BuffSpell {
 
     private DamagePotionSpell() {
-        super("Damage Potion", "Grants a friendly unit 1 extra attack.", 1, SpellType.BUFF);
+        super("Damage Potion", "Grants a friendly unit 1 extra attack.", 1);
     }
 
     /*
@@ -21,10 +19,7 @@ public class DamagePotionSpell extends Spell {
     }
 
     @Override
-    public void apply(Match match, Player caster, Unit target) {
-        if (target == null) {
-            return;
-        }
-        match.replaceUnit(target, new DamagePotionBuff(target, this));
+    protected UnitBuff createBuff(Unit target) {
+        return new DamagePotionBuff(target, this);
     }
 }

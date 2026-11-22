@@ -95,15 +95,10 @@ public final class CardRenderer {
     }
 
     private static void drawArtwork(Graphics2D g, Rectangle imageRect, ClientCard card) {
-        BufferedImage image = loadImage(CardArt.getImagePath(card.kind(), card.name()));
-
-        if (image != null) {
-            g.drawImage(image, imageRect.x, imageRect.y, imageRect.width, imageRect.height, null);
-            return;
-        }
-
-        g.setColor(placeholderColor(card.kind()));
-        g.fillRect(imageRect.x, imageRect.y, imageRect.width, imageRect.height);
+        String key = CardArt.getImagePath(card.kind(), card.name());
+        CardArtFlyweight flyweight = CardImageFlyweightFactory.getFlyweight(
+                key, placeholderColor(card.kind()));
+        flyweight.draw(g, imageRect);
     }
 
     private static Color placeholderColor(CardKind kind) {
@@ -112,10 +107,6 @@ public final class CardRenderer {
             case SPELL -> PLACEHOLDER_SPELL;
             case TRAP -> PLACEHOLDER_TRAP;
         };
-    }
-
-    private static BufferedImage loadImage(String path) {
-        return CardImageFlyweightFactory.get(path);
     }
 
     private static void drawTextArea(

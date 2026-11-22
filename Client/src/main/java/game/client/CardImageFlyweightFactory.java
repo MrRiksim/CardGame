@@ -1,6 +1,7 @@
 package game.client;
 
 import javax.imageio.ImageIO;
+import java.awt.Color;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
@@ -8,58 +9,56 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Design pattern – Flyweight.
+ * Design pattern – Flyweight (FlyweightFactory).
  *
- * <p>Card artwork images are the <b>intrinsic (shared, immutable) state</b>:
- * each distinct asset path maps to exactly one {@link BufferedImage} that is
- * loaded from disk once and then shared by every caller that asks for the
- * same path.  The image data never changes after loading, so sharing it is
- * always safe.
- *
- * <p>The <b>extrinsic state</b> – where on screen to draw the image, at what
- * size, inside which card rectangle – is never stored here.  Callers
- * ({@link CardRenderer}) supply it at the point of use, keeping this class
- * purely concerned with sharing image data.
- *
- * <p>No caller outside this class can reach the cache map, satisfying the
- * Flyweight requirement that the factory is the single gatekeeper for shared
- * instances.
+ * <p>Manages the pool of shared {@link CardArtFlyweight} instances keyed by
+ * asset path ({@code -flyweights}). When {@link #getFlyweight(String, Color)}
+ * is called:
+ * <ul>
+ *   <li>If a shared flyweight for {@code key} already exists in the pool, the
+ *       existing {@link SharedCardArtFlyweight} is returned.</li>
+ *   <li>Otherwise, the image is loaded from disk, wrapped in a new
+ *       {@link SharedCardArtFlyweight} (ConcreteFlyweight), added to the pool,
+ *       and returned.</li>
+ *   <li>If the asset file does not exist, an unshared
+ *       {@link PlaceholderCardArtFlyweight} (UnsharedConcreteFlyweight) is
+ *       returned.</li>
+ * </ul>
  */
 public final class CardImageFlyweightFactory {
 
     /*
-     * Intrinsic-state pool: path → shared BufferedImage (or null when the
-     * file is missing/unreadable, cached so we don't retry the disk on every
-     * repaint).
+     * Pool of shared flyweights: key (asset path) -> CardArtFlyweight.
      */
-    private static final Map<String, BufferedImage> cache = new HashMap<>();
+    private static final Map<String, CardArtFlyweight> flyweights = new HashMap<>();
 
     private CardImageFlyweightFactory() {}
 
     /**
-     * Returns the shared {@link BufferedImage} for {@code path}, loading it
-     * from disk on the first request and reusing the same object on every
-     * subsequent request for that path.
-     *
-     * @param path relative path to the asset file (e.g. "assets/units/knight.png")
-     * @return the shared image, or {@code null} if the file is missing or unreadable
+     * Returns an existing shared {@link CardArtFlyweight} from the pool if one
+     * exists for {@code key}; otherwise creates a new {@link SharedCardArtFlyweight},
+     * stores it in the pool, and returns it (or returns an unshared
+     * {@link PlaceholderCardArtFlyweight} if the image file is missing).
      */
-    public static BufferedImage get(String path) {
-        if (cache.containsKey(path)) {
-            return cache.get(path);
+    public static CardArtFlyweight getFlyweight(String key, Color fallbackColor) {
+        if (flyweights.containsKey(key)) {
+            return flyweights.get(key);
         }
 
-        BufferedImage image = null;
-        File file = new File(path);
+        File file = new File(key);
         if (file.exists()) {
             try {
-                image = ImageIO.read(file);
+                BufferedImage image = ImageIO.read(file);
+                if (image != null) {
+                    CardArtFlyweight shared = new SharedCardArtFlyweight(image);
+                    flyweights.put(key, shared);
+                    return shared;
+                }
             } catch (IOException ignored) {
-                // Missing or corrupt art falls back to a placeholder color in CardRenderer.
+                // Missing or unreadable art falls back to an unshared placeholder flyweight.
             }
         }
 
-        cache.put(path, image);
-        return image;
+        return new PlaceholderCardArtFlyweight(fallbackColor);
     }
 }

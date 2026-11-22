@@ -13,6 +13,9 @@ public class ResurrectToHandStrategy implements SpellStrategy {
         // If there are at least 2 cards in the graveyard, pull the second-to-last card.
         if (!graveyard.isEmpty()) {
             Card targetCard = graveyard.remove(graveyard.size() - 1);
+            if (targetCard instanceof Unit unit) {
+                unit.reset();
+            }
             caster.getHand().add(targetCard);
         }
     }

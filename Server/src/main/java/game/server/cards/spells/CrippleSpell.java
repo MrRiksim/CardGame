@@ -26,7 +26,7 @@ public class CrippleSpell extends Spell {
      */
     @Override
     public boolean canTarget(Match match, Player caster, Unit target) {
-        return target != null && match.isEnemyUnit(caster, target) && target.getState().canCripple();
+        return target != null && match.isEnemyUnit(caster, target) && target.canCripple();
     }
 
     @Override

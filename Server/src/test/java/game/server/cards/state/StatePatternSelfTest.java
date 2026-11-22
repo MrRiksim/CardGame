@@ -21,42 +21,51 @@ public class StatePatternSelfTest {
     public static void main(String[] args) {
         System.out.println("Starting State Pattern Verification...");
 
-        // 1. Initial creation -> NORMAL
+        // 1. Initial creation -> IN_HAND
         Unit knight = Knight.create(); // 3 HP, max 3 HP
-        assertCondition(knight.getState().getKind() == UnitStateKind.NORMAL, "New unit must be in NORMAL state");
-        assertCondition(!knight.getState().canHeal(), "NORMAL unit cannot be healed (already full HP)");
-        assertCondition(!knight.getState().canCripple(), "NORMAL unit cannot be crippled");
+        assertCondition(knight.getState().getKind() == UnitStateKind.IN_HAND, "New unit must be in IN_HAND state");
+        assertCondition(knight.getState().canPlay(), "IN_HAND unit can be played");
+        assertCondition(!knight.canHeal(), "IN_HAND unit cannot be healed");
+        assertCondition(!knight.canCripple(), "IN_HAND unit cannot be crippled");
 
-        // 2. Non-lethal damage -> INJURED
+        // Transition to field -> NORMAL
+        knight.setState(new NormalState());
+        assertCondition(knight.getState().getKind() == UnitStateKind.NORMAL, "Unit on field must be in NORMAL state");
+        assertCondition(!knight.getState().canPlay(), "NORMAL unit cannot be played from field");
+        assertCondition(!knight.canHeal(), "NORMAL unit cannot be healed (already full HP)");
+        assertCondition(!knight.canCripple(), "NORMAL unit cannot be crippled");
+
+        // 2. Non-lethal damage -> AFFECTED (damaged)
         knight.takeDamage(1); // 2 HP / 3 max
-        assertCondition(knight.getState().getKind() == UnitStateKind.INJURED, "Damaged unit must be in INJURED state");
-        assertCondition(knight.getState().canHeal(), "INJURED unit must be healable");
-        assertCondition(!knight.getState().canCripple(), "INJURED unit without buffs cannot be crippled");
+        assertCondition(knight.getState().getKind() == UnitStateKind.AFFECTED, "Damaged unit must be in AFFECTED state");
+        assertCondition(knight.canHeal(), "AFFECTED unit with damage must be healable");
+        assertCondition(!knight.canCripple(), "AFFECTED unit without buffs cannot be crippled");
 
         // 3. Heal -> Back to NORMAL
         knight.heal(2); // 3 HP / 3 max
         assertCondition(knight.getHealth() == knight.getMaxHealth(), "Health must be capped at max");
         assertCondition(knight.getState().getKind() == UnitStateKind.NORMAL, "Fully healed unit must return to NORMAL state");
-        assertCondition(!knight.getState().canHeal(), "Fully healed unit cannot be healed anymore");
+        assertCondition(!knight.canHeal(), "Fully healed unit cannot be healed anymore");
 
-        // 4. Buffed -> BUFFED
+        // 4. Buffed -> AFFECTED (buffed)
         HealthBoostSpell boost = HealthBoostSpell.create();
         Unit buffedKnight = new HealthBoostBuff(knight, boost);
-        assertCondition(buffedKnight.getState().getKind() == UnitStateKind.BUFFED, "Unit with buff must be in BUFFED state");
-        assertCondition(buffedKnight.getState().canCripple(), "BUFFED unit must be crippleable");
-        assertCondition(!buffedKnight.getState().canHeal(), "BUFFED unit cannot be targeted by Heal");
+        assertCondition(buffedKnight.getState().getKind() == UnitStateKind.AFFECTED, "Unit with buff must be in AFFECTED state");
+        assertCondition(buffedKnight.canCripple(), "AFFECTED unit with buff must be crippleable");
+        assertCondition(!buffedKnight.canHeal(), "AFFECTED unit with full HP cannot be targeted by Heal");
 
         // 5. Fatal damage -> DEAD
         knight.takeDamage(10);
         assertCondition(knight.isDead(), "Unit with 0 health must report isDead");
         assertCondition(knight.getState().getKind() == UnitStateKind.DEAD, "Depleted unit must be in DEAD state");
-        assertCondition(!knight.getState().canHeal(), "DEAD unit cannot be healed");
-        assertCondition(!knight.getState().canCripple(), "DEAD unit cannot be crippled");
+        assertCondition(!knight.canHeal(), "DEAD unit cannot be healed");
+        assertCondition(!knight.canCripple(), "DEAD unit cannot be crippled");
 
-        // 6. Reset (graveyard/revival) -> NORMAL
+        // 6. Reset (graveyard/revival to hand) -> IN_HAND
         knight.reset();
         assertCondition(knight.getHealth() == knight.getMaxHealth(), "Reset health must equal maxHealth");
-        assertCondition(knight.getState().getKind() == UnitStateKind.NORMAL, "Reset unit must return to NORMAL state");
+        assertCondition(knight.getState().getKind() == UnitStateKind.IN_HAND, "Revived unit returned to hand must be in IN_HAND state");
+        assertCondition(knight.getState().canPlay(), "Revived unit in hand can be played again");
 
         // 7. Verify isUndoable is true for ALL spells
         assertCondition(new ShiftingSpellCard().isUndoable(), "ShiftingSpellCard must be undoable");

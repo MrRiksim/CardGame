@@ -32,7 +32,7 @@ public class HealSpell extends Spell {
     public boolean canTarget(Match match, Player caster, Unit target) {
         return target != null
                 && match.ownerOf(target) == caster
-                && target.getState().canHeal();
+                && target.canHeal();
     }
 
     @Override

@@ -6,7 +6,6 @@ import game.server.cards.Unit;
  * Design pattern – State (Concrete State: Dead).
  *
  * <p>Unit's health has dropped to 0 or below and the card is eliminated from the field.
- * Cannot take further damage, cannot be healed, and cannot be crippled.
  * Transitions:
  * <ul>
  *   <li>Unit reset (resurrection / graveyard preparation) &rarr; {@link NormalState}</li>
@@ -20,12 +19,17 @@ public class DeadState implements UnitState {
     }
 
     @Override
-    public boolean canHeal() {
+    public boolean canPlay() {
         return false;
     }
 
     @Override
-    public boolean canCripple() {
+    public boolean canHeal(Unit unit) {
+        return false;
+    }
+
+    @Override
+    public boolean canCripple(Unit unit) {
         return false;
     }
 

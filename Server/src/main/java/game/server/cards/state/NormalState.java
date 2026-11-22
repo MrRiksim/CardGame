@@ -5,14 +5,11 @@ import game.server.cards.Unit;
 /**
  * Design pattern – State (Concrete State: Normal).
  *
- * <p>Default state of a unit: full health, no buffs active.
- * Cannot be healed (already at full health).
- * Cannot be crippled (no buffs).
+ * <p>Default state of a unit: full health, no modifiers/buffs active.
  * Transitions:
  * <ul>
- *   <li>Takes non-fatal damage &rarr; {@link InjuredState}</li>
+ *   <li>Takes non-fatal damage or receives buff/curse &rarr; {@link AffectedState}</li>
  *   <li>Takes fatal damage &rarr; {@link DeadState}</li>
- *   <li>Receives a buff &rarr; {@link BuffedState}</li>
  * </ul>
  */
 public class NormalState implements UnitState {
@@ -23,12 +20,17 @@ public class NormalState implements UnitState {
     }
 
     @Override
-    public boolean canHeal() {
+    public boolean canPlay() {
+        return false; // Already on field
+    }
+
+    @Override
+    public boolean canHeal(Unit unit) {
         return false;
     }
 
     @Override
-    public boolean canCripple() {
+    public boolean canCripple(Unit unit) {
         return false;
     }
 
@@ -41,7 +43,7 @@ public class NormalState implements UnitState {
         if (unit.getHealth() <= 0) {
             unit.setState(new DeadState());
         } else if (unit.getHealth() < unit.getMaxHealth()) {
-            unit.setState(new InjuredState());
+            unit.setState(new AffectedState());
         }
     }
 

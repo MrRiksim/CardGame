@@ -190,6 +190,7 @@ public class Match {
         Unit unit = (Unit) request.getCard();
         player.spendEnergy(unit.getEnergyCost());
         player.getHand().remove(unit);
+        unit.setState(new game.server.cards.state.NormalState());
         player.getFrontZones()[zoneIndex] = unit;
 
         checkTraps(getOpponent(player), new GameEvent(GameEvent.Type.UNIT_PLAYED, player, unit));
@@ -1135,6 +1136,9 @@ public class Match {
     public synchronized void placeUnitForFree(Player owner, int zoneIndex, Unit unit) {
         if (zoneIndex < 0 || zoneIndex >= NUMBER_OF_ZONES || owner.getFrontZones()[zoneIndex] != null) {
             return;
+        }
+        if (unit.getState() instanceof game.server.cards.state.InHandState) {
+            unit.setState(new game.server.cards.state.NormalState());
         }
         owner.getFrontZones()[zoneIndex] = unit;
         checkTraps(getOpponent(owner), new GameEvent(GameEvent.Type.UNIT_PLAYED, owner, unit));

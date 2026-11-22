@@ -23,7 +23,7 @@ public final class WeakestFirstIterator implements Iterator<Unit> {
 
     private static boolean eligible(Unit unit) {
         return unit != null && !unit.isDead()
-                && unit.getHealth() < unit.getMaxHealth() && unit.getState().canHeal();
+                && unit.getHealth() < unit.getMaxHealth() && unit.canHeal();
     }
 
     @Override

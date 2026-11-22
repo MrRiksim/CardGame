@@ -2,9 +2,9 @@ package game.server.cards;
 import game.server.Match;
 import game.server.Player;
 import game.server.memento.UnitMemento;
-import game.server.cards.state.BuffedState;
+import game.server.cards.state.AffectedState;
 import game.server.cards.state.DeadState;
-import game.server.cards.state.InjuredState;
+import game.server.cards.state.InHandState;
 import game.server.cards.state.NormalState;
 import game.server.cards.state.UnitState;
 import game.server.cards.state.UnitStateKind;
@@ -65,16 +65,16 @@ public abstract class Unit extends Card {
         if (health <= 0) {
             this.state = new DeadState();
         } else if (health < maxHealth) {
-            this.state = new InjuredState();
+            this.state = new AffectedState();
         } else {
-            this.state = new NormalState();
+            this.state = new InHandState();
         }
     }
 
     /*
      * Design pattern note – State: tracks the current combat state of the unit
-     * (Normal, Injured, Buffed, or Dead). State transitions are handled by the
-     * states themselves or dynamically reflected when buffs are wrapped.
+     * (Normal, Affected, or Dead). State transitions are handled by the
+     * states themselves or dynamically reflected when modifiers are present.
      */
     private UnitState state;
 
@@ -94,22 +94,35 @@ public abstract class Unit extends Card {
         this.health = health;
     }
 
+    public boolean canHeal() {
+        return getState().canHeal(this);
+    }
+
+    public boolean canCripple() {
+        return getState().canCripple(this);
+    }
+
+    public boolean isAffected() {
+        return getHealth() < getMaxHealth()
+                || isHealthBuffed()
+                || isDamageBuffed()
+                || getShieldCount() > 0
+                || this instanceof UnitBuff;
+    }
+
     public UnitState getState() {
+        if (state instanceof InHandState) {
+            return state;
+        }
         if (isDead()) {
             if (!(state instanceof DeadState)) {
                 state = new DeadState();
             }
             return state;
         }
-        if (isHealthBuffed() || isDamageBuffed() || getShieldCount() > 0 || this instanceof UnitBuff) {
-            if (!(state instanceof BuffedState)) {
-                state = new BuffedState();
-            }
-            return state;
-        }
-        if (getHealth() < getMaxHealth()) {
-            if (!(state instanceof InjuredState)) {
-                state = new InjuredState();
+        if (isAffected()) {
+            if (!(state instanceof AffectedState)) {
+                state = new AffectedState();
             }
             return state;
         }
@@ -228,7 +241,7 @@ public abstract class Unit extends Card {
      */
     public void reset() {
         health = maxHealth;
-        state = new NormalState();
+        state = new InHandState();
     }
 
     @Override

@@ -2,6 +2,7 @@ package game.client;
 
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
+import javax.swing.JCheckBox;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
@@ -31,6 +32,55 @@ public class CardInfoPanel extends UiColleague {
     private final JButton clearButton;
 
     private ClientCard currentCard;
+
+    private final JLabel positionLabel = new JLabel(" ", SwingConstants.CENTER);
+    private final JCheckBox ownCardsOnlyBox = new JCheckBox("My cards only");
+
+    /*
+     * Prev / Next buttons for the Iterator pattern. The panel itself doesn't
+     * iterate - it only tells the mediator which way to go, and the mediator
+     * asks the board for an iterator (see GameUiMediator.browse).
+     */
+    private JPanel buildBrowseRow() {
+        JButton prevButton = new JButton("< Prev");
+        JButton nextButton = new JButton("Next >");
+        prevButton.setMargin(new java.awt.Insets(2, 6, 2, 6));
+        nextButton.setMargin(new java.awt.Insets(2, 6, 2, 6));
+        prevButton.addActionListener(e -> {
+            if (mediator != null) {
+                mediator.notify(this, UiEvent.PREVIOUS_CARD, null);
+            }
+        });
+        nextButton.addActionListener(e -> {
+            if (mediator != null) {
+                mediator.notify(this, UiEvent.NEXT_CARD, null);
+            }
+        });
+        ownCardsOnlyBox.setOpaque(false);
+        ownCardsOnlyBox.setHorizontalAlignment(SwingConstants.CENTER);
+        positionLabel.setFont(new Font("Arial", Font.PLAIN, 12));
+
+        JPanel buttons = new JPanel(new BorderLayout(4, 0));
+        buttons.setOpaque(false);
+        buttons.add(prevButton, BorderLayout.WEST);
+        buttons.add(positionLabel, BorderLayout.CENTER);
+        buttons.add(nextButton, BorderLayout.EAST);
+
+        JPanel row = new JPanel(new BorderLayout(0, 2));
+        row.setOpaque(false);
+        row.add(buttons, BorderLayout.NORTH);
+        row.add(ownCardsOnlyBox, BorderLayout.SOUTH);
+        return row;
+    }
+
+    public boolean isOwnCardsOnly() {
+        return ownCardsOnlyBox.isSelected();
+    }
+
+    /* e.g. "3 / 12"; an empty string hides it. */
+    public void setPositionText(String text) {
+        positionLabel.setText(text == null || text.isEmpty() ? " " : text);
+    }
 
     public CardInfoPanel() {
         super(new BorderLayout(8, 8));
@@ -68,6 +118,7 @@ public class CardInfoPanel extends UiColleague {
         topSection.setOpaque(false);
         topSection.add(titleLabel, BorderLayout.NORTH);
         topSection.add(previewPanel, BorderLayout.CENTER);
+        topSection.add(buildBrowseRow(), BorderLayout.SOUTH);
 
         tableModel = new DefaultTableModel(new String[]{"Attribute", "Value"}, 0) {
             @Override

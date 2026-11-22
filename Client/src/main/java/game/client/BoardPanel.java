@@ -12,7 +12,7 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.function.Consumer;
 
-public class BoardPanel extends UiColleague {
+public class BoardPanel extends UiColleague implements ClientCardAggregate {
 
     /*
      * All of the geometry in this class is expressed in a fixed "design"
@@ -105,6 +105,7 @@ public class BoardPanel extends UiColleague {
     private int mouseY;
     private boolean didDrag = false;
     private Set<ZoneRef> highlightedZones = new HashSet<>();
+    private String selectedCardId;
 
     private final Consumer<PlayAction> playListener;
 
@@ -337,6 +338,8 @@ public class BoardPanel extends UiColleague {
         yourTurn = false;
         gameOver = false;
         draggedCard = null;
+        selectedCardId = null;
+        highlightedZones.clear();
         repaint();
     }
 
@@ -544,6 +547,7 @@ public class BoardPanel extends UiColleague {
         drawBackZones(graphics);
         drawGraveyards(graphics);
         drawHighlightedZones(graphics);
+        drawSelectionRing(graphics);
         drawArcherTargets(graphics);
 
 
@@ -798,6 +802,98 @@ public class BoardPanel extends UiColleague {
             this.highlightedZones.clear();
             repaint();
         }
+    }
+
+    /*
+     * ==========================================================
+     * Iterator pattern - BoardPanel as the Aggregate
+     * ==========================================================
+     * The cards live in many separate lists and single fields; the iterators
+     * get them handed over here, so nobody outside this class has to know.
+     */
+
+    @Override
+    public ClientCardIterator createAllCardsIterator() {
+        return new AllVisibleCardsIterator(
+                ownHand, ownFront, ownBack, ownGraveyardTop,
+                opponentFront, opponentBackShown, opponentHandShown, opponentGraveyardTop);
+    }
+
+    @Override
+    public ClientCardIterator createOwnCardsIterator() {
+        return new OwnCardsIterator(ownHand, ownFront, ownBack, ownGraveyardTop);
+    }
+
+    /* Draws a ring around this card wherever it is on the board (null clears it). */
+    public void setSelectedCard(String cardId) {
+        this.selectedCardId = cardId;
+        repaint();
+    }
+
+    private Rectangle findCardRectangle(String cardId) {
+        for (int i = 0; i < ownHand.size(); i++) {
+            if (ownHand.get(i).id().equals(cardId)) {
+                return getHandCardRectangle(
+                        i, ownHand.size(), HAND_CARD_WIDTH, HAND_CARD_HEIGHT, HAND_GAP, PLAYER_HAND_Y);
+            }
+        }
+        if (opponentHandShown != null) {
+            for (int i = 0; i < opponentHandShown.size(); i++) {
+                if (opponentHandShown.get(i).id().equals(cardId)) {
+                    return getHandCardRectangle(
+                            i, opponentHandShown.size(), OPPONENT_HAND_CARD_WIDTH,
+                            OPPONENT_HAND_CARD_HEIGHT, OPPONENT_HAND_GAP, OPPONENT_HAND_Y);
+                }
+            }
+        }
+        for (ClientUnit unit : ownFront) {
+            if (unit.id().equals(cardId)) {
+                return getFieldCardRectangle(getOwnZoneRectangle(unit.zoneIndex(), PLAYER_FRONT_Y));
+            }
+        }
+        for (ClientUnit unit : opponentFront) {
+            if (unit.id().equals(cardId)) {
+                return getFieldCardRectangle(getOpponentZoneRectangle(unit.zoneIndex(), OPPONENT_FRONT_Y));
+            }
+        }
+        for (ClientTrap trap : ownBack) {
+            if (trap.id().equals(cardId)) {
+                return getFieldCardRectangle(getOwnZoneRectangle(trap.zoneIndex(), PLAYER_BACK_Y));
+            }
+        }
+        if (opponentBackShown != null) {
+            for (ClientTrap trap : opponentBackShown) {
+                if (trap.id().equals(cardId)) {
+                    return getFieldCardRectangle(getOpponentZoneRectangle(trap.zoneIndex(), OPPONENT_BACK_Y));
+                }
+            }
+        }
+        if (ownGraveyardTop != null && ownGraveyardTop.id().equals(cardId)) {
+            return getFieldCardRectangle(getPlayerUtilityRectangle(PLAYER_FRONT_Y));
+        }
+        if (opponentGraveyardTop != null && opponentGraveyardTop.id().equals(cardId)) {
+            return getFieldCardRectangle(getOpponentUtilityRectangle(OPPONENT_FRONT_Y));
+        }
+        return null;
+    }
+
+    private void drawSelectionRing(Graphics2D graphics) {
+        if (selectedCardId == null) {
+            return;
+        }
+        // Don't ring the empty hand slot while that card is being dragged around.
+        if (draggedCard != null && didDrag && draggedCard.id().equals(selectedCardId)) {
+            return;
+        }
+        Rectangle rect = findCardRectangle(selectedCardId);
+        if (rect == null) {
+            return;
+        }
+        Graphics2D g2 = (Graphics2D) graphics.create();
+        g2.setColor(new Color(255, 200, 0));
+        g2.setStroke(new BasicStroke(4f));
+        g2.drawRoundRect(rect.x - 4, rect.y - 4, rect.width + 8, rect.height + 8, 10, 10);
+        g2.dispose();
     }
 
     public boolean isYourTurn() {
